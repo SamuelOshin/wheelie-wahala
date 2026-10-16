@@ -121,7 +121,11 @@ export function buildTrack(level) {
   const end = lastChain.points[lastChain.points.length - 1];
   const finishX = end.x - RUN_OUT;
 
-  const track = { chains, segments, length: s, finishX, end };
+  let minY = Infinity;
+  for (const ch of chains) for (const p of ch.points) minY = Math.min(minY, p.y);
+  // Falling this far below the lowest track means the bike has left the course.
+  const killY = minY - 40;
+  const track = { chains, segments, length: s, finishX, end, minY, killY };
   track.checkpoints = [startX + 3, ...checkpoints].map((cx) => spawnAtX(track, cx));
   return track;
 }

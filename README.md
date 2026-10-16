@@ -26,6 +26,17 @@ one run. Crash by landing on your head and you go back to the last checkpoint, a
 count from when you got there. Every flip you ever land adds to your **lifetime flips**, with
 milestones at 25, 100, 250, 500 and up.
 
+## Modes
+
+- **Levels**: three hand-made desert courses, three stars each.
+- **Daily Challenge**: a new course every day (UTC), the same for everyone. It's generated from the
+  date and checked by an autopilot before you see it. Finish it on consecutive days to build a 🔥 streak.
+- **Flip Frenzy**: 60 seconds on a long generated course full of kickers. Score as many flip
+  points as you can; every trick landed at ×3 combo or higher adds 3 seconds.
+- **Ghost**: your fastest run on each level (and today's daily) rides along as a see-through bike.
+- **Coins and missions**: three missions at a time ("Land 10 flips", "Reach a ×3 combo"…). Coins come
+  from runs, missions, daily streaks and lifetime-flip milestones (the Garage to spend them is next).
+
 ## Settings
 
 ⚙️ on the menu or pause screen:
@@ -68,6 +79,9 @@ python -m http.server 8765
 
 Then open http://localhost:8765. Sign-in and scores only work on `wheelie-wahala.start.ng`.
 Locally the game plays with a default rider.
+
+`node tools/gen-check.mjs 40` rides 40 generated Daily and Frenzy courses with the autopilot and lists
+any it can't finish cleanly.
 
 `node tools/sim.mjs desert-2` rides a level headlessly with a scripted rider (add `--raw` for a rider
 who never leans, or `--flip` to try flips) and prints crashes, jumps and the finish time.

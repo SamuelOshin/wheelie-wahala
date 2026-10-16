@@ -61,6 +61,9 @@
     <button id="player-sign-in" hidden>Sign in</button>
   </div>
 
+  <!-- Coins -->
+  <div class="coins" id="coins" hidden><span class="coin" aria-hidden="true"></span><b id="coins-n">0</b></div>
+
   <!-- Title / level select -->
   <section id="menu" class="screen">
     <div class="logo">
@@ -68,8 +71,22 @@
       <span class="logo-bottom">Wahala!</span>
     </div>
     <p class="tagline">Flip it. Loop it. Land it.</p>
+    <div id="modes" class="modes">
+      <button class="mode daily" id="mode-daily">
+        <span class="mode-tag">DAILY</span>
+        <span class="mode-title">Daily Challenge</span>
+        <span class="mode-sub" id="daily-sub">A new course every day</span>
+        <span class="mode-streak" id="daily-streak"></span>
+      </button>
+      <button class="mode frenzy" id="mode-frenzy">
+        <span class="mode-tag">60 s</span>
+        <span class="mode-title">Flip Frenzy</span>
+        <span class="mode-sub" id="frenzy-sub">Flip as much as you can</span>
+      </button>
+    </div>
     <div id="levels" class="levels"></div>
     <div class="menu-row">
+      <button id="btn-missions" class="pill">🎯 Missions <span class="badge" id="missions-badge" hidden></span></button>
       <button id="btn-board" class="pill">🏆 Leaderboard</button>
       <button id="btn-settings" class="pill">⚙️ Settings</button>
       <button id="btn-sound" class="pill" aria-label="Sound on or off">🔊</button>
@@ -92,7 +109,7 @@
 
   <!-- Stage clear -->
   <section id="finish" class="screen" hidden>
-    <div class="banner">STAGE CLEAR!</div>
+    <div class="banner" id="banner">STAGE CLEAR!</div>
     <div class="panel card">
       <div class="stars" id="stars"><span>★</span><span>★</span><span>★</span></div>
       <ul class="goals" id="goals"></ul>
@@ -102,6 +119,11 @@
         <div><small>Perfect</small><b id="res-perfect"></b></div>
       </div>
       <p class="lifetime" id="res-lifetime"></p>
+      <div class="res-extra">
+        <span class="earned" id="res-coins"></span>
+        <span class="streak" id="res-streak" hidden></span>
+      </div>
+      <ul class="mission-list compact" id="res-missions"></ul>
       <p id="res-note"></p>
       <p id="res-save"></p>
       <div class="menu-row">
@@ -125,6 +147,17 @@
     </div>
   </section>
 
+  <!-- Missions -->
+  <section id="missions" class="screen dim" hidden>
+    <div class="panel wide">
+      <h2>Missions</h2>
+      <p class="note-center">Finish a mission to earn coins. A new one takes its place.</p>
+      <ul class="mission-list" id="missions-list"></ul>
+      <p class="note-center" id="coins-note"></p>
+      <button id="btn-missions-close" class="big">Let's go</button>
+    </div>
+  </section>
+
   <!-- Settings -->
   <section id="settings" class="screen dim" hidden>
     <div class="panel wide settings">
@@ -139,6 +172,10 @@
         <label class="row check">
           <span>Show name above rider</span>
           <input id="set-nametag" type="checkbox">
+        </label>
+        <label class="row check">
+          <span>Race your best run (ghost)</span>
+          <input id="set-ghost" type="checkbox">
         </label>
         <p class="note" id="set-name-note">Your look comes from your start.ng character. The leaderboard shows your start.ng name.</p>
       </fieldset>

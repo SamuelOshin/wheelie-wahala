@@ -183,3 +183,42 @@ input { user-select: text; -webkit-user-select: text; }
 .level .best .fl { margin-left: 6px; }
 @media (max-height: 520px) { .hud-flips { top: 64px; } .flip-count { font-size: 26px; } .combo { top: 70px; } .combo-x { font-size: 36px; } .lifetime-menu { display: none !important; } }
 @media (prefers-reduced-motion: reduce) { #flash.on, .flip-count.bump, .combo-x.bump { animation: none; } }
+
+/* Coins */
+.coins { position: fixed; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); display: flex; align-items: center; gap: 6px; padding: 7px 14px 7px 10px; border-radius: 999px; background: #292a23; color: #ffe14d; font: 20px var(--display); z-index: 5; box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+.coin { display: inline-block; width: .9em; height: .9em; margin-left: .2em; vertical-align: -.08em; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff4b0, #f7c21b 45%, #c68a00 100%); box-shadow: inset 0 -2px 0 rgba(120,70,0,.35), 0 1px 0 rgba(0,0,0,.2); }
+.coins .coin { width: 20px; height: 20px; margin: 0; }
+.coins.bump { animation: bump .45s ease-out; }
+
+/* Mode cards */
+.modes { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin-top: auto; }
+.modes + .levels { margin-top: 0; }
+.mode { position: relative; width: 254px; padding: 12px 14px; border: 0; border-radius: 18px; text-align: left; color: #fff; display: grid; gap: 2px; box-shadow: 0 6px 0 rgba(0,0,0,.25); transition: transform .1s; }
+.mode:hover { transform: translateY(-3px); }
+.mode:active { transform: translateY(3px); box-shadow: 0 3px 0 rgba(0,0,0,.25); }
+.mode.daily { background: linear-gradient(135deg, #ff7a29, #e5383b); }
+.mode.frenzy { background: linear-gradient(135deg, #7b2ff7, #3a86ff); }
+.mode-tag { justify-self: start; font: 12px var(--display); letter-spacing: 1.5px; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,.25); }
+.mode-title { font: 24px var(--display); text-shadow: 0 2px 0 rgba(0,0,0,.2); }
+.mode-sub { font-weight: 800; font-size: 13px; opacity: .92; }
+.mode-streak { position: absolute; top: 10px; right: 12px; font: 20px var(--display); }
+.badge { display: inline-grid; place-items: center; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; background: var(--red); color: #fff; font-size: 12px; margin-left: 4px; }
+
+/* Missions */
+.note-center { margin: 0; text-align: center; font-weight: 700; opacity: .7; font-size: 14px; }
+.mission-list { list-style: none; margin: 0; padding: 0; width: 100%; display: grid; gap: 8px; }
+.mission-list li { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; align-items: center; padding: 10px 14px; border-radius: 14px; background: #f6e9cf; font-weight: 800; }
+.mission-list li .reward { color: #a26a00; font: 17px var(--display); }
+.mission-list li .bar { grid-column: 1 / -1; height: 8px; border-radius: 9px; background: #e6d3ad; overflow: hidden; }
+.mission-list li .bar i { display: block; height: 100%; background: var(--orange); border-radius: 9px; }
+.mission-list li .count { grid-column: 1 / -1; font-size: 12px; opacity: .6; }
+.mission-list li.done { background: #dff5d9; }
+.mission-list li.done .bar i { background: var(--green); }
+.mission-list.compact li { padding: 6px 10px; font-size: 13px; }
+.mission-list.compact li .count { display: none; }
+.mission-list.compact:empty { display: none; }
+.res-extra { display: flex; gap: 14px; justify-content: center; font: 20px var(--display); }
+.res-extra .earned { color: #a26a00; }
+.res-extra .streak { color: var(--red); }
+.hud-time-low { color: #ffd0d0; animation: bump .5s ease-out infinite; }
+@media (max-height: 520px) { .mode { width: 200px; padding: 8px 10px; } .mode-title { font-size: 19px; } .mode-sub { display: none; } .coins { transform: scale(.85); transform-origin: top right; } }

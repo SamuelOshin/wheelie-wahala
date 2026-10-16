@@ -51,7 +51,7 @@ while (t < 120) {
     lastLog = Math.floor(t);
     console.log(`${t.toFixed(0)}s x=${p.x.toFixed(1)} y=${p.y.toFixed(1)} v=${sim.speed.toFixed(1)} s=${sim.progress.toFixed(1)} ${air ? 'AIR' : ''}`);
   }
-  if (p.y < -200) { console.log('fell off the world'); sim.reset(track.checkpoints[cp]); crashes++; }
+  if (p.y < track.killY) { console.log('fell off the world'); sim.reset(track.checkpoints[cp]); crashes++; }
   if (p.x >= track.finishX) { console.log(`FINISH in ${t.toFixed(2)}s, crashes ${crashes}, flips ${flips}, top speed ${maxSpeed.toFixed(1)} m/s`); process.exit(0); }
 }
 console.log(`DNF: x=${sim.chassis.getPosition().x.toFixed(1)} of ${track.finishX.toFixed(1)}`);

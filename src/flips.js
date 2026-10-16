@@ -86,6 +86,7 @@ export class FlipTracker {
       type: 'trick',
       name: trickName(p.flips, p.back),
       flips: p.flips,
+      back: p.back,
       points,
       multiplier: this.multiplier,
       perfect: p.perfect,

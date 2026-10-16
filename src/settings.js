@@ -4,6 +4,7 @@ const KEY = 'wheelie-wahala-settings-v1';
 export const DEFAULTS = {
   riderName: '', // empty = use the start.ng character name
   nameTag: true,
+  ghost: true, // race your best run
   master: 100,
   music: 70,
   sfx: 80,
@@ -31,6 +32,7 @@ export function sanitize(s) {
   return {
     riderName: cleanName(s.riderName),
     nameTag: s.nameTag !== false,
+    ghost: s.ghost !== false,
     master: clamp(s.master),
     music: clamp(s.music),
     sfx: clamp(s.sfx),

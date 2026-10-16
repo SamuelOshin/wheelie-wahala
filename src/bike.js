@@ -42,7 +42,9 @@ const box = (w, h, d, mat, x, y, z = 0, rz = 0) => {
 };
 
 export class BikeModel {
-  constructor(style) {
+  // options.ghost: a see-through copy used to show your best run.
+  constructor(style, { ghost = false } = {}) {
+    this.isGhost = ghost;
     const m = (this.mats = MATS());
     this.root = new THREE.Group(); // added to the scene
     this.chassis = new THREE.Group();
@@ -99,6 +101,31 @@ export class BikeModel {
     this.rider.group.traverse((o) => { if (o.isMesh) o.castShadow = true; });
     this.chassis.add(this.rider.group);
     this.thrown = null;
+    if (this.isGhost) this.ghostify();
+  }
+
+  // Make every material see-through and stop the ghost casting shadows.
+  ghostify() {
+    this.root.traverse((o) => {
+      if (!o.isMesh) return;
+      o.castShadow = false;
+      if (!o.material.userData.ghost) {
+        o.material = o.material.clone();
+        Object.assign(o.material, { transparent: true, opacity: 0.32, depthWrite: false });
+        o.material.userData.ghost = true;
+      }
+    });
+  }
+
+  // A pose for the ghost from just the chassis position (wheels at rest, spinning with distance).
+  poseFromChassis(x, y, angle) {
+    const t = TUNING;
+    const c = Math.cos(angle), s = Math.sin(angle);
+    if (this.lastX !== undefined) this.spin = (this.spin ?? 0) - Math.hypot(x - this.lastX, y - this.lastY) / t.wheelRadius;
+    this.lastX = x;
+    this.lastY = y;
+    const at = ([lx, ly]) => ({ x: x + c * lx - s * ly, y: y + s * lx + c * ly, angle: this.spin ?? 0 });
+    return { chassis: { x, y, angle }, rear: at(t.rearWheel), front: at(t.frontWheel) };
   }
 
   // On a crash the rider flies off the bike and tumbles (no physics, just a toss).

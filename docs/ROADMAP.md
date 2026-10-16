@@ -1,6 +1,6 @@
 # Wheelie Wahala: roadmap to a game people play every day
 
-Status: **plan for review**. Live today: 3 desert levels, flips, loops, start.ng rider, leaderboard,
+Status: **Phase 1 (Flip Fever) and Phase 2 (Come Back Tomorrow) are live.** Live today: 3 desert levels, flips, loops, start.ng rider, leaderboard,
 settings. About 1–2 minutes of content.
 
 ## 1. Where we are, honestly

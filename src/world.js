@@ -149,6 +149,31 @@ function trackMesh(chain, bottomY) {
   return group;
 }
 
+// Smoothed track height along x, so the desert floor and the rocks follow courses that
+// climb or drop a long way (Flip Frenzy goes down a lot) instead of sitting at the lowest point.
+function heightProfile(track, x0, x1, step = 4) {
+  const n = Math.ceil((x1 - x0) / step) + 1;
+  const raw = new Array(n).fill(NaN);
+  for (const g of track.segments) {
+    if (g.bx <= g.ax) continue;
+    for (let i = Math.max(0, Math.ceil((g.ax - x0) / step)); i < n && x0 + i * step <= g.bx; i++) {
+      if (Number.isNaN(raw[i])) raw[i] = g.ay + ((g.by - g.ay) * (x0 + i * step - g.ax)) / (g.bx - g.ax);
+    }
+  }
+  // Fill the ends and any gaps from the nearest known height.
+  let lastY = raw.find((v) => !Number.isNaN(v)) ?? 0;
+  for (let i = 0; i < n; i++) Number.isNaN(raw[i]) ? (raw[i] = lastY) : (lastY = raw[i]);
+  // Heavy smoothing (±60 m) so the floor rolls gently rather than copying every jump.
+  const out = new Array(n), w = 15;
+  let sum = 0, count = 0;
+  for (let i = -w; i < n; i++) {
+    if (i + w < n) { sum += raw[i + w]; count++; }
+    if (i - w - 1 >= 0) { sum -= raw[i - w - 1]; count--; }
+    if (i >= 0) out[i] = sum / count;
+  }
+  return (x) => out[Math.max(0, Math.min(n - 1, Math.round((x - x0) / step)))];
+}
+
 function flag(colorA, colorB, checkered) {
   const g = new THREE.Group();
   g.add(limb(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 3.2, 0), 0.05, toon('#b98a3e')));
@@ -251,14 +276,18 @@ export class World {
     const floorY = minY - 14;
     for (const ch of track.chains) this.levelGroup.add(trackMesh(ch, floorY));
 
-    // Desert floor far below and behind.
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(4000, 700), toon(theme.floor));
-    floor.rotation.x = -Math.PI / 2;
-    floor.position.set((minX + maxX) / 2, floorY, -330);
-    floor.receiveShadow = true;
-    this.levelGroup.add(floor);
+    // Desert floor behind the track, following the course's height.
+    const x0 = minX - 400, x1 = maxX + 400;
+    const height = heightProfile(track, x0, x1);
+    const base = (x) => height(x) - 14;
+    const rows = [-4, -30, -80, -160, -260, -400, -650];
+    const cols = [];
+    for (let x = x0; x <= x1; x += 10) cols.push(x);
+    const floorRows = rows.map((z) => cols.map((x) => new THREE.Vector3(x, base(x), z)));
+    const floorMat = toon(theme.floor, { side: THREE.DoubleSide });
+    for (let i = 0; i < rows.length - 1; i++) this.levelGroup.add(strip(floorRows[i + 1], floorRows[i], floorMat));
 
-    this.addScenery(level, theme, minX - 120, maxX + 160, floorY, track);
+    this.addScenery(level, theme, minX - 120, maxX + 160, base, track);
 
     // Flags.
     const fin = spawnAtX(track, track.finishX);
@@ -281,7 +310,8 @@ export class World {
     if (f) f.userData.cloth.material.color.set('#f1c40f');
   }
 
-  addScenery(level, theme, x0, x1, floorY, track) {
+  // base(x): ground height of the desert floor at x.
+  addScenery(level, theme, x0, x1, base, track) {
     const r = rng(level.id);
     const rockMats = theme.rocks.map((c) => toon(c, { flatShading: true }));
     const g = this.levelGroup;
@@ -297,17 +327,17 @@ export class World {
           const w = 10 + r() * 30, h = 8 + r() * 22;
           const mesa = new THREE.Mesh(new THREE.CylinderGeometry(w * 0.42, w * 0.5, h, 7), mat);
           mesa.scale.z = 0.5;
-          mesa.position.set(x, floorY + h / 2, z);
+          mesa.position.set(x, base(x) + h / 2, z);
           g.add(mesa);
         } else {
           const h = 10 + r() * 34 + layer * 8, w = 2 + r() * 4;
           const p = new THREE.Mesh(new THREE.CylinderGeometry(w * (0.5 + r() * 0.5), w * 1.2, h, 6), mat);
-          p.position.set(x, floorY + h / 2, z);
+          p.position.set(x, base(x) + h / 2, z);
           p.rotation.y = r() * 3;
           g.add(p);
           if (r() < 0.5) {
             const cap = new THREE.Mesh(new THREE.CylinderGeometry(w * 1.1, w * 0.7, 2.5, 6), mat);
-            cap.position.set(x, floorY + h + 0.8, z);
+            cap.position.set(x, base(x) + h + 0.8, z);
             g.add(cap);
           }
         }
@@ -316,7 +346,7 @@ export class World {
 
     // Sun.
     const sun = new THREE.Mesh(new THREE.CircleGeometry(22, 32), new THREE.MeshBasicMaterial({ color: theme.sun, fog: false }));
-    sun.position.set((x0 + x1) / 2, floorY + 90, -420);
+    sun.position.set(x0 + 140, base(x0 + 120) + 100, -420);
     g.add(sun);
     this.sunDisc = sun;
 
@@ -366,6 +396,8 @@ export class World {
     const sx = (Math.random() - 0.5) * this.shakeAmt, sy = (Math.random() - 0.5) * this.shakeAmt;
     this.camera.position.set(c.x + sx, c.y + c.dist * 0.08 + sy, c.dist);
     this.camera.lookAt(c.x + sx * 0.5, c.y + sy * 0.5, 0);
+    // The sun is far away: it moves with the camera.
+    this.sunDisc?.position.set(c.x + 60, c.y + 95, -420);
     // Keep the sun's shadow box on the bike.
     this.sun.position.set(pos.x - 6, pos.y + 14, 10);
     this.sun.target.position.set(pos.x, pos.y, 0);
