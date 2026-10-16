@@ -1,8 +1,8 @@
 // All sound is made with WebAudio, so there are no audio files.
 //   master ── music  (a quiet looping groove)
-//          ├─ engine (soft hum that follows the wheel speed)
+//          ├─ engine (motorbike sound that follows the wheel speed)
 //          └─ sfx    (flips, landings, crashes, stars)
-let ctx, master, musicBus, sfxBus, engineGain, engineFilter, engine = [], muted = false;
+let ctx, master, musicBus, sfxBus, engineGain, engineFilter, enginePulse, engineLfo, engine = [], muted = false;
 let musicTimer, nextNote = 0, stepIndex = 0, musicLevel = 0.5, musicOn = true;
 
 try {
@@ -56,22 +56,35 @@ export function unlockAudio() {
   echo.connect(echoTone).connect(echoBack).connect(echo);
   echoBack.connect(master);
 
-  // Engine: a low triangle and sine pair through a gentle low-pass. Quiet on purpose.
+  // Engine: a motorbike "brap" in the mid range, so phone and laptop speakers can play it.
+  // Two saws plus a sub square -> rumble trimmed off -> warm low-pass -> pulsing like firing strokes.
+  const hp = ctx.createBiquadFilter();
+  hp.type = 'highpass';
+  hp.frequency.value = 90;
   engineFilter = ctx.createBiquadFilter();
   engineFilter.type = 'lowpass';
-  engineFilter.frequency.value = 380;
-  engineFilter.Q.value = 0.4;
+  engineFilter.frequency.value = 800;
+  engineFilter.Q.value = 0.8;
+  enginePulse = ctx.createGain();
+  enginePulse.gain.value = 0.65;
+  engineLfo = ctx.createOscillator();
+  engineLfo.frequency.value = 20;
+  const lfoDepth = ctx.createGain();
+  lfoDepth.gain.value = 0.35;
+  engineLfo.connect(lfoDepth).connect(enginePulse.gain);
+  engineLfo.start();
   engineGain = ctx.createGain();
   engineGain.gain.value = 0;
-  engineFilter.connect(engineGain).connect(master);
-  engine = [['triangle', 0], ['sine', 1200]].map(([type, detune]) => {
-    const o = ctx.createOscillator();
+  hp.connect(engineFilter).connect(enginePulse).connect(engineGain).connect(master);
+  engine = [['sawtooth', 1, 0, 0.5], ['sawtooth', 1, 9, 0.35], ['square', 0.5, 0, 0.3]].map(([type, ratio, detune, level]) => {
+    const o = ctx.createOscillator(), g = ctx.createGain();
     o.type = type;
-    o.frequency.value = 40;
+    o.frequency.value = 80 * ratio;
     o.detune.value = detune;
-    o.connect(engineFilter);
+    g.gain.value = level;
+    o.connect(g).connect(hp);
     o.start();
-    return o;
+    return { o, ratio };
   });
 
   startMusic();
@@ -80,10 +93,12 @@ export function unlockAudio() {
 export function setEngine(speed, throttle, running) {
   if (!ctx) return;
   const t = ctx.currentTime;
-  const f = 38 + Math.min(30, speed) * 2.6 + (throttle ? 10 : 0);
-  for (const o of engine) o.frequency.setTargetAtTime(f, t, 0.08);
-  engineFilter.frequency.setTargetAtTime(260 + f * 2.2, t, 0.08);
-  engineGain.gain.setTargetAtTime(running ? (throttle ? 0.1 : 0.05) * vol.engine : 0, t, 0.12);
+  // Revs: about 70 Hz at idle up to about 300 Hz flat out.
+  const f = 70 + Math.min(30, speed) * 6.8 + (throttle ? 18 : 0);
+  for (const { o, ratio } of engine) o.frequency.setTargetAtTime(f * ratio, t, 0.07);
+  engineLfo.frequency.setTargetAtTime(f / 4, t, 0.07);
+  engineFilter.frequency.setTargetAtTime(520 + f * 3.2 + (throttle ? 300 : 0), t, 0.07);
+  engineGain.gain.setTargetAtTime(running ? (throttle ? 0.2 : 0.1) * vol.engine : 0, t, 0.1);
 }
 
 // ---------- music ----------
