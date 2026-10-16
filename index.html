@@ -16,13 +16,21 @@
 
   <!-- In-game HUD -->
   <div id="hud" hidden>
-    <button id="btn-restart" class="round" aria-label="Restart from checkpoint" title="Restart (R)">
+    <button id="btn-restart" class="round" aria-label="Back to checkpoint. Tap twice to restart the level" title="Checkpoint (R) · tap twice to restart (T)">
       <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
     </button>
     <div class="hud-center">
       <div id="hud-level"></div>
       <div id="hud-time">0:00.00</div>
-      <div id="hud-flips"></div>
+    </div>
+    <div class="hud-flips" id="hud-flips">
+      <div class="flip-count"><span class="flip-icon">↻</span><b id="hud-flipcount">0</b><small id="hud-flipgoal">/ 3</small></div>
+      <div class="flip-score" id="hud-score">0</div>
+    </div>
+    <div class="combo" id="combo" hidden>
+      <div class="combo-x" id="combo-x">×2</div>
+      <div class="combo-label">COMBO</div>
+      <div class="combo-bar"><i id="combo-bar"></i></div>
     </div>
     <button id="btn-pause" class="round" aria-label="Pause" title="Pause (Esc)">
       <svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
@@ -67,7 +75,8 @@
       <button id="btn-sound" class="pill" aria-label="Sound on or off">🔊</button>
       <a id="btn-exit" class="pill" href="https://start.ng/">✕ Exit to start.ng</a>
     </div>
-    <p class="controls-help" id="controls-help">↑ ride · ↓ brake · ← → lean · R restart · Esc pause</p>
+    <p class="lifetime-menu" id="menu-lifetime" hidden></p>
+    <p class="controls-help" id="controls-help">↑ ride · ↓ brake · ← → lean · R checkpoint · T restart · Esc pause</p>
   </section>
 
   <!-- Pause -->
@@ -86,11 +95,13 @@
     <div class="banner">STAGE CLEAR!</div>
     <div class="panel card">
       <div class="stars" id="stars"><span>★</span><span>★</span><span>★</span></div>
+      <ul class="goals" id="goals"></ul>
       <div class="result">
-        <div><small>Time</small><b id="res-time"></b></div>
-        <div><small>Flips</small><b id="res-flips"></b></div>
-        <div><small>Best</small><b id="res-best"></b></div>
+        <div><small>Flip score</small><b id="res-score"></b></div>
+        <div><small>Best combo</small><b id="res-combo"></b></div>
+        <div><small>Perfect</small><b id="res-perfect"></b></div>
       </div>
+      <p class="lifetime" id="res-lifetime"></p>
       <p id="res-note"></p>
       <p id="res-save"></p>
       <div class="menu-row">
@@ -106,7 +117,7 @@
     <div class="panel wide">
       <h2>Leaderboard</h2>
       <table>
-        <thead><tr><th>#</th><th>Rider</th><th>★</th><th>Flips</th><th>Time</th></tr></thead>
+        <thead><tr><th>#</th><th>Rider</th><th>★</th><th>Best flip score</th><th>Lifetime flips</th></tr></thead>
         <tbody id="board-rows"></tbody>
       </table>
       <p id="board-note"></p>
@@ -164,6 +175,16 @@
   </section>
 
   <div id="nametag" hidden></div>
+
+  <!-- Spin ring around the bike while it's in the air -->
+  <svg id="spin" viewBox="-8 -8 116 116" hidden>
+    <circle class="track" cx="50" cy="50" r="44"></circle>
+    <circle class="fill" id="spin-fill" cx="50" cy="50" r="44" pathLength="100"></circle>
+    <circle class="badge" cx="50" cy="6" r="13"></circle>
+    <text x="50" y="7" id="spin-n">0</text>
+  </svg>
+
+  <div id="flash"></div>
 
   <div id="rotate">📱↻<br>Turn your phone sideways to ride</div>
 

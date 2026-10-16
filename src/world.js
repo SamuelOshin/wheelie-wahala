@@ -204,6 +204,8 @@ export class World {
     this.scene.add(this.levelGroup);
     this.camState = null;
     this.flags = [];
+    this.shakeAmt = 0;
+    this.zoom = 1; // < 1 punches the camera in (slow-mo)
     this.resize();
     addEventListener('resize', () => this.resize());
   }
@@ -358,12 +360,19 @@ export class World {
     const k = 1 - Math.exp(-dt * 4);
     c.x += (target.x - c.x) * k;
     c.y += (target.y - c.y) * k * 1.4;
-    c.dist += (target.dist - c.dist) * (1 - Math.exp(-dt * 1.5));
-    this.camera.position.set(c.x, c.y + c.dist * 0.08, c.dist);
-    this.camera.lookAt(c.x, c.y, 0);
+    c.dist += (target.dist * this.zoom - c.dist) * (1 - Math.exp(-dt * (this.zoom < 1 ? 5 : 1.5)));
+    // Shake: a quick random jolt that dies away.
+    this.shakeAmt *= Math.exp(-dt * 9);
+    const sx = (Math.random() - 0.5) * this.shakeAmt, sy = (Math.random() - 0.5) * this.shakeAmt;
+    this.camera.position.set(c.x + sx, c.y + c.dist * 0.08 + sy, c.dist);
+    this.camera.lookAt(c.x + sx * 0.5, c.y + sy * 0.5, 0);
     // Keep the sun's shadow box on the bike.
     this.sun.position.set(pos.x - 6, pos.y + 14, 10);
     this.sun.target.position.set(pos.x, pos.y, 0);
+  }
+
+  shake(amount) {
+    this.shakeAmt = Math.max(this.shakeAmt, amount);
   }
 
   animateFlags(time) {

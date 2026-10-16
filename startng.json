@@ -2,7 +2,8 @@
   "leaderboard": {
     "stats": [
       { "key": "stars", "label": "Stars", "order": "highest" },
-      { "key": "flips", "label": "Total flips", "order": "highest" },
+      { "key": "flip_score", "label": "Best flip score", "order": "highest" },
+      { "key": "flips", "label": "Lifetime flips", "order": "highest" },
       { "key": "time", "label": "Total time", "order": "lowest", "format": "time" }
     ]
   }

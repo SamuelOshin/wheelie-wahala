@@ -14,10 +14,17 @@ Play it at **https://wheelie-wahala.start.ng**.
 | Lean back (backflip) | ← / A | ◀ |
 | Lean forward (frontflip) | → / D | ▶ |
 | Back to checkpoint | R | ⟲ |
+| Restart the level | T | ⟲ twice |
 | Pause | Esc / P | ⏸ |
 
-Every clean flip takes 1 second off your time. Finish under the target times for 2 or 3 stars. Crash by
-landing on your head, and you go back to the last checkpoint.
+**Flips are the heart of it.** A ring round the bike fills as you spin, and every landed flip counts.
+Chain flips jump after jump (within 4.5 s) for a combo multiplier up to ×8. Land level with the
+track for a **PERFECT** (+50%). Crash before you've ridden away from a landing and the trick is lost.
+
+Each level has **three stars, one per goal**: finish, beat the target time, and land the flip target in
+one run. Crash by landing on your head and you go back to the last checkpoint, along with your flip
+count from when you got there. Every flip you ever land adds to your **lifetime flips**, with
+milestones at 25, 100, 250, 500 and up.
 
 ## Settings
 
@@ -38,7 +45,8 @@ The music is a quiet generated loop, turned down while you ride.
   hat, crown) and accessory (glasses, earrings, beard, scarf, backpack). Change your look on start.ng
   and come back to the tab, and the rider updates.
 - Guests ride as start.ng's guest look, with a sign-in button.
-- **Leaderboard** (`startng.json`): total stars, then total flips, then total best time.
+- **Leaderboard** (`startng.json`): total stars, then best flip score, then lifetime flips, then total
+  best time.
 
 ## How it's built
 

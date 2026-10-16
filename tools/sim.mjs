@@ -40,8 +40,11 @@ while (t < 120) {
       sim.reset(track.checkpoints[cp]);
       if (crashes > 8) { console.log('too many crashes'); process.exit(1); }
     }
-    if (e.type === 'land') console.log(`${t.toFixed(2)}s landed after ${e.air.toFixed(2)}s air at x=${p.x.toFixed(1)}`);
-    if (e.type === 'flip') { flips += e.count; console.log(`${t.toFixed(2)}s FLIP x${e.count} at x=${p.x.toFixed(1)}`); }
+    if (e.type === 'land') {
+      flips += e.flips;
+      console.log(`${t.toFixed(2)}s landed after ${e.air.toFixed(2)}s air at x=${p.x.toFixed(1)}` +
+        `${e.flips ? `, FLIP x${e.flips}` : ''}${e.perfect ? ', PERFECT' : ''}, impact ${e.impact.toFixed(1)} m/s`);
+    }
   }
   maxSpeed = Math.max(maxSpeed, sim.speed);
   if (Math.floor(t) !== lastLog && Math.floor(t) % 2 === 0) {

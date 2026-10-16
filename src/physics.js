@@ -133,6 +133,7 @@ export class BikeSim {
   }
 
   // Course position of the nearest track a wheel is touching, or null.
+  // Also remembers that segment in this.contactSeg (used to judge landings).
   wheelContact(wheel) {
     let best = null;
     const p = wheel.getPosition();
@@ -143,7 +144,10 @@ export class BikeSim {
       if (!seg) continue;
       const u = ((p.x - seg.ax) * (seg.bx - seg.ax) + (p.y - seg.ay) * (seg.by - seg.ay)) / (seg.len * seg.len);
       const s = seg.s0 + seg.len * Math.max(0, Math.min(1, u));
-      if (best === null || Math.abs(s - this.progress) < Math.abs(best - this.progress)) best = s;
+      if (best === null || Math.abs(s - this.progress) < Math.abs(best - this.progress)) {
+        best = s;
+        this.contactSeg = seg;
+      }
     }
     return best;
   }
@@ -207,6 +211,8 @@ export class BikeSim {
       }
     }
 
+    const vBefore = this.chassis.getLinearVelocity();
+    const vx = vBefore.x, vy = vBefore.y;
     this.world.step(dt, 8, 3);
 
     // Ground contact and course progress.
@@ -228,10 +234,22 @@ export class BikeSim {
       this.airTime += dt;
       this.airSpin += d;
     } else {
-      if (this.airTime > 0.25 && !this.crashed) {
+      if (this.airTime > 0.25 && !this.crashed && this.contactSeg) {
+        // How the bike met the track: a full turn within ~40° counts as a flip,
+        // and landing within 12° of the slope is a PERFECT landing.
+        const g = this.contactSeg;
+        const slope = Math.atan2(g.by - g.ay, g.bx - g.ax);
+        let off = angle - slope;
+        off = Math.abs(Math.atan2(Math.sin(off), Math.cos(off)));
         const flips = Math.floor((Math.abs(this.airSpin) + 0.7) / (Math.PI * 2));
-        if (flips > 0) events.push({ type: 'flip', count: flips, back: this.airSpin > 0 });
-        if (this.airTime > 0.6) events.push({ type: 'land', air: this.airTime });
+        events.push({
+          type: 'land',
+          air: this.airTime,
+          flips,
+          back: this.airSpin > 0,
+          perfect: off < (12 * Math.PI) / 180,
+          impact: Math.abs(vx * g.nx + vy * g.ny), // speed into the track
+        });
       }
       this.airTime = 0;
       this.airSpin = 0;

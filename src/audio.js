@@ -245,6 +245,10 @@ export const sfx = {
   finish: limit('finish', 1000, () => [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.12, 0.35, 'triangle', 0.09))),
   star: (i) => tone(880 + i * 220, 0, 0.3, 'sine', 0.12),
   click: limit('click', 60, () => tone(520, 0, 0.06, 'sine', 0.06)),
+  // Combo: each step of the chain plays a little higher.
+  combo: (m) => { const f = 523 * 2 ** (Math.min(12, (m - 1) * 2) / 12); tone(f, 0.12, 0.16, 'square', 0.05); tone(f * 1.5, 0.2, 0.2, 'triangle', 0.07); },
+  perfect: limit('perfect', 200, () => { tone(1568, 0, 0.12, 'sine', 0.09); tone(2093, 0.06, 0.3, 'sine', 0.08); }),
+  milestone: () => [392, 523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.4, 'triangle', 0.09)),
 };
 
 export function toggleMute() {

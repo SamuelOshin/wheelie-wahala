@@ -1,5 +1,5 @@
 // The courses. Pieces are explained at the top of track.js.
-// stars: [gold, silver] times in seconds (finishing at all is one star).
+// Three stars, one per goal: finish · beat `time` (seconds) · land `flipGoal` flips in one run.
 
 export const LEVELS = [
   {
@@ -15,12 +15,13 @@ export const LEVELS = [
       ['slope', 30, -6], ['checkpoint'], ['flat', 10], ['ramp', 12, 3.5], ['gap', 16, -5],
       ['slope', 22, -4], ['flat', 30],
     ],
-    stars: [18, 25],
+    time: 22,
+    flipGoal: 3,
   },
   {
     id: 'desert-2',
     name: 'Red Line Drop',
-    hint: 'Lean back in the air to backflip. Every flip takes 1 s off your time',
+    hint: 'Lean back in the air to backflip. Chain flips jump after jump for a combo!',
     style: 'line',
     start: [0, 0],
     pieces: [
@@ -30,7 +31,8 @@ export const LEVELS = [
       ['checkpoint'], ['flat', 6], ['ramp', 14, 6], ['gap', 20, -12], ['slope', 26, -8], ['flat', 10],
       ['hill', 20, 3], ['flat', 30],
     ],
-    stars: [21, 29],
+    time: 26,
+    flipGoal: 6,
   },
   {
     id: 'desert-3',
@@ -45,6 +47,7 @@ export const LEVELS = [
       ['flat', 16], ['checkpoint'], ['dip', 28, 6], ['flat', 10], ['ramp', 12, 3.5], ['gap', 16, -6],
       ['slope', 24, -5], ['flat', 30],
     ],
-    stars: [22, 30],
+    time: 27,
+    flipGoal: 4,
   },
 ];

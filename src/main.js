@@ -5,6 +5,8 @@ import { BikeSim } from './physics.js';
 import { buildTrack } from './track.js';
 import { LEVELS } from './levels.js';
 import { DEFAULT_STYLE } from './rider.js';
+import { FlipTracker } from './flips.js';
+import { Particles, buzz } from './fx.js';
 import { setupInput, readInput, anyInput, isTouch, setTouchMode } from './input.js';
 import { unlockAudio, setEngine, sfx, toggleMute, isMuted, setMusicLevel, setVolumes, suspendAudio } from './audio.js';
 import { loadSettings, saveSettings, sanitize, cleanName } from './settings.js';
@@ -13,24 +15,48 @@ import * as startng from './startng.js';
 
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 120;
-const FLIP_BONUS = 1; // seconds off per flip
+const MILESTONES = [25, 100, 250, 500, 1000, 2500, 5000, 10000];
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const num = (n) => Math.round(n).toLocaleString('en');
 
 // ---------- saved progress (this browser only) ----------
-const SAVE_KEY = 'wheelie-wahala-v1';
+// Per level: best time, most flips, best flip score, best combo, and which of the three
+// goals (finish · time · flips) have ever been reached. Lifetime flips count every landed flip.
+const SAVE_KEY = 'wheelie-wahala-v2';
+const OLD_KEY = 'wheelie-wahala-v1';
+
 function loadProgress() {
   try {
     const p = JSON.parse(localStorage.getItem(SAVE_KEY));
     if (p && p.levels) return p;
   } catch {}
-  return { levels: {}, flips: 0 };
+  const fresh = { levels: {}, flips: 0, milestone: 0 };
+  // Carry over progress from the first version (time-only stars).
+  try {
+    const old = JSON.parse(localStorage.getItem(OLD_KEY));
+    if (old?.levels) {
+      fresh.flips = old.flips || 0;
+      for (const l of LEVELS) {
+        const o = old.levels[l.id];
+        if (o) fresh.levels[l.id] = {
+          time: o.time, flips: o.flips || 0, score: 0, combo: 0,
+          goals: { finish: true, time: o.time <= l.time, flips: (o.flips || 0) >= l.flipGoal },
+        };
+      }
+      while (fresh.milestone < MILESTONES.length && fresh.flips >= MILESTONES[fresh.milestone]) fresh.milestone++;
+    }
+  } catch {}
+  return fresh;
 }
 const progress = loadProgress();
 function saveProgress() {
   try { localStorage.setItem(SAVE_KEY, JSON.stringify(progress)); } catch {}
 }
+const starsOf = (b) => (b ? +!!b.goals.finish + +!!b.goals.time + +!!b.goals.flips : 0);
 
 // ---------- player (start.ng character) ----------
 const player = { signedIn: false, name: 'Rider', account: null, face: null, style: DEFAULT_STYLE, id: null };
+let startngConnected = false;
 
 let refreshing = null, lookups = 0;
 function refreshPlayer() {
@@ -56,7 +82,6 @@ async function lookUpPlayer() {
   if (JSON.stringify(player.style) !== before) bike.setStyle(player.style);
 }
 
-let startngConnected = false;
 function renderPlayerCard(connected) {
   startngConnected = connected;
   const card = $('player-card');
@@ -78,12 +103,14 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 const world = new World($('game'));
 const bike = new BikeModel(player.style);
 world.scene.add(bike.root);
+const particles = new Particles(world.scene);
 
 let state = 'menu'; // menu | playing | paused | finished
 let levelIndex = 0;
 let level, track, sim;
 let run; // the current attempt
-let acc = 0, last = performance.now(), clock = 0;
+const tricks = new FlipTracker();
+let acc = 0, last = performance.now(), clock = 0, slowmo = 0;
 
 function loadLevel(i) {
   levelIndex = i;
@@ -92,12 +119,12 @@ function loadLevel(i) {
   sim = new BikeSim(track);
   world.buildLevel(level, track);
   world.scene.add(bike.root);
+  particles.attach(world.scene);
   sim.reset(track.checkpoints[0]);
   bike.resetRider();
-  run = {
-    started: false, time: 0, flips: 0, checkpoint: 0,
-    crashTimer: 0, finished: false, landedAt: -1,
-  };
+  tricks.reset();
+  run = { started: false, time: 0, checkpoint: 0, crashTimer: 0, finished: false, goalShown: false, saved: tricks.snapshot() };
+  slowmo = 0;
   world.camState = null;
 }
 
@@ -107,10 +134,12 @@ function startLevel(i) {
   setState('playing');
   $('hud-level').textContent = `${i + 1}. ${level.name}`;
   showHint(level.hint, 5);
-  updateHud();
+  updateHud(true);
 }
 
 function respawn() {
+  tricks.restore(run.saved);
+  run.goalShown = tricks.flips >= level.flipGoal;
   sim.reset(track.checkpoints[run.checkpoint]);
   bike.resetRider();
   run.crashTimer = 0;
@@ -130,6 +159,7 @@ function setState(s) {
   $('hud').hidden = !(s === 'playing' || s === 'paused');
   $('touch').hidden = !(s === 'playing' && isTouch());
   $('player-card').hidden = !startngConnected || s === 'playing' || s === 'paused';
+  if (s !== 'playing') $('spin').toggleAttribute('hidden', true);
   if (s === 'menu') renderLevels();
   setMusicLevel(s === 'playing' ? 0.32 : s === 'paused' ? 0.25 : 0.6);
 }
@@ -140,12 +170,30 @@ const fmt = (t) => {
   const m = Math.floor(t / 60), s = t - m * 60;
   return `${m}:${s.toFixed(2).padStart(5, '0')}`;
 };
-const score = () => Math.max(0, run.time - run.flips * FLIP_BONUS);
 
-function updateHud() {
-  $('hud-time').textContent = fmt(score());
-  $('hud-flips').textContent = run.flips ? `${run.flips} flip${run.flips > 1 ? 's' : ''} · −${run.flips * FLIP_BONUS}s` : '';
+let shownFlips = -1;
+function updateHud(force = false) {
+  $('hud-time').textContent = fmt(run.time);
+  if (force || tricks.flips !== shownFlips) {
+    shownFlips = tricks.flips;
+    $('hud-flipcount').textContent = tricks.flips;
+    $('hud-flipgoal').textContent = tricks.flips >= level.flipGoal ? '✓' : `/ ${level.flipGoal}`;
+    $('hud-flips').querySelector('.flip-count').classList.toggle('done', tricks.flips >= level.flipGoal);
+  }
+  $('hud-score').textContent = num(tricks.score);
+  const showCombo = tricks.combo >= 2;
+  $('combo').hidden = !showCombo;
+  if (showCombo) {
+    $('combo-x').textContent = `×${tricks.multiplier}`;
+    $('combo-bar').style.transform = `scaleX(${tricks.comboLeft.toFixed(3)})`;
+  }
 }
+
+const bump = (el) => {
+  el.classList.remove('bump');
+  void el.offsetWidth; // restart the animation
+  el.classList.add('bump');
+};
 
 let hintTimer;
 function showHint(text, seconds) {
@@ -156,17 +204,35 @@ function showHint(text, seconds) {
   hintTimer = setTimeout(() => (h.style.opacity = 0), seconds * 1000);
 }
 
-function popup(text, cls = '') {
+// lines: [text, className?][] — the first line is the headline.
+function popup(lines, cls = '') {
   const el = document.createElement('div');
   el.className = `popup ${cls}`;
-  el.textContent = text;
+  for (const [i, [text, c]] of lines.entries()) {
+    const span = document.createElement(i === 0 ? 'span' : 'span');
+    if (c) span.className = c;
+    span.textContent = text;
+    el.append(span);
+  }
   $('popups').append(el);
-  setTimeout(() => el.remove(), 1200);
+  setTimeout(() => el.remove(), 1300);
+}
+
+function flash() {
+  if (reducedMotion) return;
+  const f = $('flash');
+  f.classList.remove('on');
+  void f.offsetWidth;
+  f.classList.add('on');
+}
+
+function slowMo(seconds) {
+  if (!reducedMotion) slowmo = Math.max(slowmo, seconds);
 }
 
 // ---------- level select ----------
 function unlocked(i) {
-  return i === 0 || !!progress.levels[LEVELS[i - 1].id];
+  return i === 0 || !!progress.levels[LEVELS[i - 1].id]?.goals.finish;
 }
 
 function renderLevels() {
@@ -175,10 +241,13 @@ function renderLevels() {
     const best = progress.levels[l.id];
     const b = document.createElement('button');
     b.className = 'level' + (unlocked(i) ? '' : ' locked');
-    const stars = [1, 2, 3].map((n) => `<span class="${best && best.stars >= n ? 'on' : ''}">★</span>`).join('');
+    const n = starsOf(best);
+    const stars = [1, 2, 3].map((k) => `<span class="${n >= k ? 'on' : ''}">★</span>`).join('');
     b.innerHTML = `<div class="num">${i + 1}</div><div class="name"></div><div class="lstars">${stars}</div><div class="best"></div>`;
     b.querySelector('.name').textContent = l.name;
-    b.querySelector('.best').textContent = best ? `Best ${fmt(best.time)}` : unlocked(i) ? 'New!' : '🔒 Finish the last one';
+    b.querySelector('.best').textContent = best
+      ? `Best ${fmt(best.time)} · ↻ ${best.flips}`
+      : unlocked(i) ? 'New!' : '🔒 Finish the last one';
     b.onclick = () => {
       if (!unlocked(i)) return;
       sfx.click();
@@ -186,12 +255,74 @@ function renderLevels() {
     };
     return b;
   }));
+  const lt = $('menu-lifetime');
+  lt.hidden = !progress.flips;
+  lt.textContent = `↻ ${num(progress.flips)} lifetime flips`;
+}
+
+// ---------- tricks, landings, crashes ----------
+function onLand(e) {
+  tricks.land(e);
+  const strength = Math.min(2, e.impact / 7);
+  const p = sim.rear.getPosition();
+  particles.dust(p.x, p.y - 0.3, strength);
+  world.shake(Math.min(0.45, e.impact * 0.035));
+  if (e.impact > 5) sfx.land();
+  if (e.impact > 10) buzz(18);
+}
+
+function onTrick(e) {
+  progress.flips += e.flips;
+  $('popups').replaceChildren(); // the newest trick replaces the last one on screen
+  const lines = [[e.name], [`+${num(e.points)}${e.multiplier > 1 ? `  ×${e.multiplier}` : ''}`, 'pts']];
+  if (e.perfect) lines.push(['PERFECT!', 'perfect']);
+  popup(lines, e.flips >= 3 ? 'big' : '');
+  sfx.flip(e.flips);
+  if (e.multiplier > 1) sfx.combo(e.multiplier);
+  bump($('hud-flips').querySelector('.flip-count'));
+  if (e.multiplier > 1) bump($('combo-x'));
+  if (e.perfect) {
+    flash();
+    sfx.perfect();
+    const c = sim.chassis.getPosition();
+    particles.sparkle(c.x, c.y);
+  }
+  if (e.flips >= 3 || e.multiplier >= 3) slowMo(0.5);
+  buzz(e.perfect ? 45 : 25);
+
+  if (!run.goalShown && tricks.flips >= level.flipGoal) {
+    run.goalShown = true;
+    setTimeout(() => { popup([['★ FLIP GOAL!']], 'gold'); sfx.star(2); }, 450);
+  }
+  while (progress.milestone < MILESTONES.length && progress.flips >= MILESTONES[progress.milestone]) {
+    const m = MILESTONES[progress.milestone++];
+    setTimeout(() => { popup([[`🏆 ${num(m)} LIFETIME FLIPS!`]], 'gold'); sfx.milestone(); }, 900);
+  }
+  saveProgress();
+}
+
+function crash() {
+  if (run.crashTimer) return;
+  sim.crashed = true;
+  run.crashTimer = 1.1;
+  const lost = tricks.crash();
+  bike.throwRider(sim.chassis.getLinearVelocity());
+  const c = sim.chassis.getPosition();
+  particles.sparks(c.x, c.y);
+  world.shake(0.6);
+  sfx.crash();
+  buzz(90);
+  popup(lost.bailed ? [['BAILED!'], ['trick lost', 'pts']] : lost.comboLost ? [['OUCH!'], ['combo lost', 'pts']] : [['OUCH!']], 'bad');
+}
+
+function onTrickEvent(e) {
+  if (e?.type === 'trick') onTrick(e);
+  else if (e?.type === 'comboEnd') popup([[`${e.combo}× COMBO`], ['nice chain!', 'pts']], 'small');
 }
 
 // ---------- finishing ----------
-function starsFor(time) {
-  const [gold, silver] = level.stars;
-  return time <= gold ? 3 : time <= silver ? 2 : 1;
+function bestFlipScore() {
+  return Math.max(0, ...LEVELS.map((l) => progress.levels[l.id]?.score ?? 0));
 }
 
 function totals() {
@@ -199,44 +330,85 @@ function totals() {
   for (const l of LEVELS) {
     const b = progress.levels[l.id];
     if (b) {
-      stars += b.stars;
+      stars += starsOf(b);
       time += b.time;
     }
   }
-  return { stars, flips: progress.flips, time: Math.round(time) };
+  return { stars, flip_score: Math.round(bestFlipScore()), flips: progress.flips, time: Math.round(time) };
 }
 
 async function finishLevel() {
   run.finished = true;
   sim.coasting = true;
-  const time = score();
-  const stars = starsFor(time);
+  // A trick landed right on the line still counts.
+  if (tricks.pending) onTrickEvent(tricks.confirm());
+  const time = run.time;
+  const flips = tricks.flips;
+  const got = { finish: true, time: time <= level.time, flips: flips >= level.flipGoal };
   const prev = progress.levels[level.id];
-  const isBest = !prev || time < prev.time;
-  progress.flips += run.flips;
+  const had = prev?.goals ?? {};
   progress.levels[level.id] = {
-    time: isBest ? time : prev.time,
-    stars: Math.max(stars, prev?.stars ?? 0),
-    flips: Math.max(run.flips, prev?.flips ?? 0),
+    time: Math.min(time, prev?.time ?? Infinity),
+    flips: Math.max(flips, prev?.flips ?? 0),
+    score: Math.max(tricks.score, prev?.score ?? 0),
+    combo: Math.max(tricks.bestCombo, prev?.combo ?? 0),
+    goals: { finish: true, time: got.time || !!had.time, flips: got.flips || !!had.flips },
   };
+  const best = progress.levels[level.id];
   saveProgress();
   sfx.finish();
+  const c = sim.chassis.getPosition();
+  particles.confetti(c.x + 4, c.y + 1);
   setState('finished');
 
-  $('res-time').textContent = fmt(time);
-  $('res-flips').textContent = run.flips;
-  $('res-best').textContent = fmt(progress.levels[level.id].time);
-  const [gold, silver] = level.stars;
-  $('res-note').textContent = stars === 3 ? (isBest && prev ? 'New best time!' : 'Perfect run!')
-    : `Beat ${fmt(stars === 2 ? gold : silver)} for ${stars === 2 ? '3' : '2'} stars`;
+  // The three goals for this run.
+  const goals = [
+    ['finish', 'Finish', fmt(time), got.finish],
+    ['time', `Under ${fmt(level.time)}`, fmt(time), got.time],
+    ['flips', `${level.flipGoal} flips`, `${flips} ↻`, got.flips],
+  ];
+  $('goals').replaceChildren(...goals.map(([key, label, value, ok]) => {
+    const li = document.createElement('li');
+    li.className = (ok ? 'ok' : '') + (ok && !had[key] ? ' new' : '');
+    const tick = document.createElement('span');
+    tick.className = 'tick';
+    tick.textContent = ok ? '✓' : '';
+    const text = document.createElement('span');
+    text.textContent = label;
+    if (ok && !had[key]) {
+      const n = document.createElement('small');
+      n.textContent = '  NEW ★';
+      text.append(n);
+    }
+    const val = document.createElement('span');
+    val.className = 'val';
+    val.textContent = value;
+    li.append(tick, text, val);
+    return li;
+  }));
+  $('res-score').textContent = num(tricks.score);
+  $('res-combo').textContent = tricks.bestCombo ? `×${tricks.bestCombo}` : '–';
+  $('res-perfect').textContent = tricks.perfects;
+  $('res-lifetime').textContent = `↻ ${num(progress.flips)} lifetime flips`;
+
+  // Always point at the next goal: how close was it?
+  const notes = [];
+  if (!got.time) notes.push(`${(time - level.time).toFixed(2)} s off the time star`);
+  if (!got.flips) {
+    const short = level.flipGoal - flips;
+    notes.push(`${short} flip${short > 1 ? 's' : ''} short of the flip star`);
+  }
+  $('res-note').textContent = notes.length ? `So close: ${notes.join(' · ')}` : 'All three goals in one run! 🔥';
   $('btn-next').hidden = levelIndex >= LEVELS.length - 1;
+
+  const n = starsOf(best);
   const starEls = [...$('stars').children];
   starEls.forEach((s) => s.classList.remove('on'));
-  starEls.slice(0, stars).forEach((s, i) => setTimeout(() => { s.classList.add('on'); sfx.star(i); }, 450 + i * 380));
+  starEls.slice(0, n).forEach((s, i) => setTimeout(() => { s.classList.add('on'); sfx.star(i); }, 450 + i * 380));
 
   const save = $('res-save');
   if (!startng.onStartNg()) {
-    save.textContent = 'Play on start.ng to put your times on the leaderboard.';
+    save.textContent = 'Play on start.ng to put your score on the leaderboard.';
   } else if (!player.signedIn) {
     save.innerHTML = '';
     const a = document.createElement('a');
@@ -268,7 +440,8 @@ async function openBoard() {
   rows.replaceChildren(...entries.map((e) => {
     const tr = document.createElement('tr');
     if (player.id && e.player_id === player.id) tr.className = 'me';
-    const cells = [e.rank, e.name, e.stats?.stars ?? e.score, e.stats?.flips ?? '–', e.stats?.time != null ? fmt(e.stats.time).slice(0, -3) : '–'];
+    const st = e.stats ?? {};
+    const cells = [e.rank, e.name, st.stars ?? e.score, st.flip_score != null ? num(st.flip_score) : '–', st.flips != null ? num(st.flips) : '–'];
     cells.forEach((c, i) => {
       const td = document.createElement('td');
       if (i === 1) {
@@ -298,7 +471,15 @@ $('btn-sound').onclick = () => { unlockAudio(); toggleMute(); soundLabel(); };
 // Browsers only allow sound after the player does something, so start it on the first tap or key.
 addEventListener('pointerdown', () => unlockAudio(), { once: true });
 $('btn-pause').onclick = () => pause();
-$('btn-restart').onclick = () => { if (state === 'playing') respawn(); };
+// Tap once: back to the checkpoint. Tap twice quickly: restart the level.
+let lastRestartTap = 0;
+$('btn-restart').onclick = () => {
+  if (state !== 'playing') return;
+  const now = performance.now();
+  if (now - lastRestartTap < 400) restartLevel();
+  else respawn();
+  lastRestartTap = now;
+};
 $('btn-resume').onclick = () => setState('playing');
 $('btn-retry-p').onclick = () => restartLevel();
 $('btn-menu-p').onclick = () => goMenu();
@@ -317,8 +498,8 @@ function applySettings() {
   setTouchMode(settings.touch);
   $('touch').hidden = !(state === 'playing' && isTouch());
   $('controls-help').textContent = isTouch()
-    ? 'Left: lean back / forward · Right: brake / GO'
-    : '↑ ride · ↓ brake · ← → lean · R restart · Esc pause';
+    ? 'Left: lean back / forward · Right: brake / GO · ⟲ twice to restart'
+    : '↑ ride · ↓ brake · ← → lean · R checkpoint · T restart · Esc pause';
 }
 
 // The name over the rider: your own pick, or your start.ng character's name.
@@ -326,7 +507,6 @@ const riderName = () => settings.riderName || (startngConnected ? player.name : 
 
 function openSettings() {
   sfx.click();
-  const f = $('settings');
   $('set-name').value = settings.riderName;
   $('set-name').placeholder = startngConnected ? player.name : 'Rider';
   $('set-nametag').checked = settings.nameTag;
@@ -338,7 +518,7 @@ function openSettings() {
   for (const [id, key] of [['set-quality', 'quality'], ['set-touch', 'touch']]) {
     for (const b of $(id).children) b.classList.toggle('on', b.dataset.v === settings[key]);
   }
-  f.hidden = false;
+  $('settings').hidden = false;
 }
 
 function updateSetting(key, value) {
@@ -371,27 +551,50 @@ for (const [id, key] of [['set-quality', 'quality'], ['set-touch', 'touch']]) {
   }
 }
 $('btn-reset').onclick = () => {
-  if (!confirm('Reset all your stars and best times on this device? Scores already on the start.ng leaderboard stay there.')) return;
+  if (!confirm('Reset all your stars, best times and lifetime flips on this device? Scores already on the start.ng leaderboard stay there.')) return;
   progress.levels = {};
   progress.flips = 0;
+  progress.milestone = 0;
   saveProgress();
   renderLevels();
   sfx.click();
 };
 
-// Name tag follows the rider's head on screen.
-const tagPos = new THREE.Vector3();
-function updateNameTag() {
+// ---------- things that follow the bike on screen ----------
+const tmp = new THREE.Vector3();
+function toScreen(lx, ly) {
+  tmp.set(lx, ly, 0).applyMatrix4(bike.chassis.matrixWorld).project(world.camera);
+  return [(tmp.x * 0.5 + 0.5) * innerWidth, (-tmp.y * 0.5 + 0.5) * innerHeight];
+}
+
+function updateOverlays() {
+  bike.chassis.updateMatrixWorld();
+  // Name tag above the rider.
   const tag = $('nametag');
   const name = riderName();
-  const show = settings.nameTag && name && (state === 'playing' || state === 'finished') && !bike.thrown;
-  tag.hidden = !show;
-  if (!show) return;
-  if (tag.textContent !== name) tag.textContent = name;
-  bike.chassis.updateMatrixWorld();
-  tagPos.set(0.02, 1.75, 0).applyMatrix4(bike.chassis.matrixWorld).project(world.camera);
-  const x = (tagPos.x * 0.5 + 0.5) * innerWidth, y = (-tagPos.y * 0.5 + 0.5) * innerHeight;
-  tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+  const showTag = settings.nameTag && name && state === 'playing' && !bike.thrown;
+  tag.hidden = !showTag;
+  if (showTag) {
+    if (tag.textContent !== name) tag.textContent = name;
+    const [x, y] = toScreen(0.02, 1.75);
+    tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+  }
+  // Spin ring while flying: fills once per flip, the number is flips so far.
+  const ring = $('spin');
+  const inAir = state === 'playing' && !sim.crashed && !sim.rearGround && !sim.frontGround && sim.airTime > 0.3;
+  ring.toggleAttribute('hidden', !inAir); // an <svg> has no .hidden property
+  if (inAir) {
+    const spin = Math.abs(sim.airSpin);
+    const n = Math.floor((spin + 0.7) / (Math.PI * 2));
+    const part = (spin % (Math.PI * 2)) / (Math.PI * 2);
+    $('spin-fill').style.strokeDasharray = `${(part * 100).toFixed(1)} 100`;
+    $('spin-n').textContent = n;
+    ring.classList.toggle('full', n > 0);
+    const c = sim.chassis.getPosition();
+    tmp.set(c.x, c.y + 0.3, 0).project(world.camera);
+    const x = (tmp.x * 0.5 + 0.5) * innerWidth, y = (-tmp.y * 0.5 + 0.5) * innerHeight;
+    ring.style.transform = `translate(${(x - 75).toFixed(1)}px, ${(y - 75).toFixed(1)}px)`;
+  }
 }
 
 function pause() {
@@ -407,6 +610,7 @@ setupInput({
   onKey(code) {
     unlockAudio();
     if (code === 'KeyR' && state === 'playing') respawn();
+    if (code === 'KeyT' && (state === 'playing' || state === 'paused' || state === 'finished')) restartLevel();
     if ((code === 'Escape' || code === 'KeyP')) {
       if (!$('settings').hidden) $('settings').hidden = true;
       else if (state === 'playing') pause();
@@ -427,64 +631,54 @@ document.addEventListener('visibilitychange', () => {
 
 // ---------- game loop ----------
 function physicsStep(input) {
-  const events = sim.step(input, STEP);
-  for (const e of events) {
-    if (e.type === 'flip') {
-      run.flips += e.count;
-      sfx.flip(e.count);
-      popup(e.count > 1 ? `${e.count}× FLIP!` : e.back ? 'BACKFLIP!' : 'FRONTFLIP!');
-    } else if (e.type === 'land') {
-      sfx.land();
-    } else if (e.type === 'crash') {
-      crash();
-    }
+  for (const e of sim.step(input, STEP)) {
+    if (e.type === 'land') onLand(e);
+    else if (e.type === 'crash') crash();
   }
-}
-
-function crash() {
-  if (run.crashTimer) return;
-  sim.crashed = true;
-  run.crashTimer = 1.1;
-  bike.throwRider(sim.chassis.getLinearVelocity());
-  sfx.crash();
-  popup('OUCH!', 'bad');
 }
 
 function tick(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
-  frame(dt);
+  if (!window.__ww?.frozen) frame(dt); // tests can freeze the game to take screenshots
   requestAnimationFrame(tick);
 }
 
 function frame(dt) {
   clock += dt;
+  // Slow motion on big tricks: game time runs at 35% and the camera punches in.
+  const scale = slowmo > 0 ? 0.35 : 1;
+  slowmo = Math.max(0, slowmo - dt);
+  world.zoom = slowmo > 0 ? 0.8 : 1;
+  const gdt = dt * scale;
 
   if (state === 'playing') {
     const input = readInput();
     if (!run.started && anyInput()) run.started = true;
     const live = run.crashTimer ? { throttle: 0, brake: 0, lean: 0 } : input;
-    acc += dt;
+    acc += gdt;
     while (acc >= STEP) {
       physicsStep(live);
       acc -= STEP;
     }
-    if (run.started && !run.finished) run.time += dt;
+    if (!sim.crashed) onTrickEvent(tricks.update(gdt));
+    if (run.started && !run.finished) run.time += gdt;
 
     const p = sim.chassis.getPosition();
-    // Checkpoints.
     for (let i = run.checkpoint + 1; i < track.checkpoints.length; i++) {
       if (p.x >= track.checkpoints[i].x && !sim.crashed) {
         run.checkpoint = i;
+        if (tricks.pending) onTrickEvent(tricks.confirm());
+        run.saved = tricks.snapshot();
         world.markCheckpoint(i);
         sfx.checkpoint();
-        popup('CHECKPOINT', 'small');
+        popup([['CHECKPOINT']], 'small');
       }
     }
     if (p.y < track.checkpoints[0].y - 120) crash();
     if (run.crashTimer) {
       run.crashTimer -= dt;
-      bike.updateThrown(dt);
+      bike.updateThrown(gdt);
       if (run.crashTimer <= 0) respawn();
     }
     if (!run.finished && !sim.crashed && p.x >= track.finishX) finishLevel();
@@ -494,7 +688,7 @@ function frame(dt) {
     world.follow(p, sim.chassis.getLinearVelocity(), !sim.rearGround && !sim.frontGround, dt);
   } else if (state === 'finished') {
     // Let the bike roll to a quiet stop past the line.
-    acc += dt;
+    acc += gdt;
     while (acc >= STEP) {
       sim.step({ throttle: 0, brake: 0, lean: 0 }, STEP);
       acc -= STEP;
@@ -522,9 +716,10 @@ function frame(dt) {
     setEngine(0, 0, false);
   }
 
+  particles.update(state === 'paused' ? 0 : gdt);
   world.animateFlags(clock);
   world.render();
-  updateNameTag();
+  updateOverlays();
 }
 
 applySettings();
@@ -537,6 +732,6 @@ requestAnimationFrame(tick);
 // advance(seconds) steps the game without waiting for the screen (for automated tests).
 window.__ww = {
   get sim() { return sim; }, get run() { return run; }, get state() { return state; },
-  startLevel, player, progress, bike, goMenu, world,
+  startLevel, player, progress, bike, goMenu, world, tricks, totals,
   advance(seconds, fps = 60) { for (let t = 0; t < seconds; t += 1 / fps) frame(1 / fps); },
 };
