@@ -114,3 +114,24 @@ tr.me td { background: #ffe9a8; }
   #touch button.go { width: 84px; height: 84px; }
 }
 @media (max-width: 560px) { .startng-card { transform: scale(.85); transform-origin: top left; } }
+
+/* Settings */
+.settings { gap: 10px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.settings fieldset { width: 100%; border: 0; border-top: 2px solid #f0e0c2; margin: 0; padding: 10px 0 2px; }
+.settings legend { font: 18px var(--display); color: var(--deep); padding: 0 8px 0 0; }
+.settings .row { display: flex; align-items: center; gap: 12px; padding: 6px 0; font-weight: 800; }
+.settings .row > span { flex: 0 0 132px; }
+.settings .row input[type=text] { flex: 1; min-width: 0; font: 800 16px var(--body); padding: 9px 12px; border-radius: 12px; border: 2px solid #e7cfa4; background: #fff; color: var(--ink); }
+.settings .row input[type=text]:focus { outline: none; border-color: var(--orange); }
+.settings .row input[type=range] { flex: 1; accent-color: var(--orange); height: 28px; }
+.settings .row output { width: 34px; text-align: right; font-variant-numeric: tabular-nums; opacity: .7; }
+.settings .row.check input { width: 22px; height: 22px; accent-color: var(--green); }
+.settings .note { margin: 2px 0 4px; font-size: 13px; opacity: .65; font-weight: 700; }
+.seg { display: flex; background: #f0e0c2; border-radius: 999px; padding: 3px; gap: 3px; flex-wrap: wrap; }
+.seg button { border: 0; background: transparent; border-radius: 999px; padding: 7px 14px; font-weight: 800; }
+.seg button.on { background: #fff; box-shadow: 0 2px 0 rgba(120,40,10,.3); }
+.pill.danger { color: #b3261e; }
+input { user-select: text; -webkit-user-select: text; }
+
+/* Name tag above the rider */
+#nametag { position: fixed; left: 0; top: 0; transform: translate(-50%, -100%); pointer-events: none; padding: 3px 10px; border-radius: 999px; background: rgba(41,42,35,.78); color: #fff; font: 14px var(--display); letter-spacing: .3px; white-space: nowrap; will-change: transform; }

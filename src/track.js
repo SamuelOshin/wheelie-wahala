@@ -17,7 +17,7 @@
 // Styles: 'ground' (filled earth), 'line' (thin red line), 'wood' / 'ice' (thick bands).
 
 const STEP = 0.4; // metres between sampled points
-const RUN_IN = 40, RUN_OUT = 70;
+const RUN_IN = 40, RUN_OUT = 100;
 
 export function buildTrack(level) {
   const chains = [];

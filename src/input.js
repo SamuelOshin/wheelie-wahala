@@ -12,7 +12,9 @@ const MAP = {
 
 export function setupInput({ onKey } = {}) {
   onPress = onKey ?? onPress;
+  const typing = (e) => e.target instanceof HTMLElement && e.target.matches('input, textarea, select');
   addEventListener('keydown', (e) => {
+    if (typing(e)) return; // let people type their rider name
     if (MAP[e.code]) {
       keys.add(MAP[e.code]);
       e.preventDefault();
@@ -58,4 +60,6 @@ export function anyInput() {
   return i.throttle || i.brake || i.lean;
 }
 
-export const isTouch = () => matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
+let touchMode = 'auto';
+export const setTouchMode = (m) => (touchMode = m);
+export const isTouch = () => touchMode === 'on' || (touchMode === 'auto' && (matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window));

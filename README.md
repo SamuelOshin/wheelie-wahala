@@ -19,6 +19,18 @@ Play it at **https://wheelie-wahala.start.ng**.
 Every clean flip takes 1 second off your time. Finish under the target times for 2 or 3 stars. Crash by
 landing on your head, and you go back to the last checkpoint.
 
+## Settings
+
+⚙️ on the menu or pause screen:
+
+- **Rider name**: shown in a tag above your rider (leave it empty to use your start.ng character's name).
+- **Sound**: separate master, music, effects and engine volumes. 🔊 on the menu mutes everything.
+- **Quality**: High (sharp, soft shadows), Medium, or Low (no shadows) for slower phones.
+- **Touch buttons**: Auto, On or Off.
+- **Reset progress** for this device.
+
+The music is a quiet generated loop, turned down while you ride.
+
 ## start.ng
 
 - **Your character rides the bike.** The rider is built in 3D from your start.ng `style`: body, top and

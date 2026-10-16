@@ -208,6 +208,15 @@ export class World {
     addEventListener('resize', () => this.resize());
   }
 
+  // high: sharp + soft shadows · medium: 1.5x pixels, shadows · low: 1x pixels, no shadows.
+  setQuality(q) {
+    this.quality = q;
+    const dpr = window.devicePixelRatio || 1;
+    this.renderer.setPixelRatio(Math.min(dpr, q === 'high' ? 2 : q === 'medium' ? 1.5 : 1));
+    this.sun.castShadow = q !== 'low';
+    this.resize();
+  }
+
   resize() {
     const w = innerWidth, h = innerHeight;
     this.renderer.setSize(w, h, false);

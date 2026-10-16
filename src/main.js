@@ -5,8 +5,10 @@ import { BikeSim } from './physics.js';
 import { buildTrack } from './track.js';
 import { LEVELS } from './levels.js';
 import { DEFAULT_STYLE } from './rider.js';
-import { setupInput, readInput, anyInput, isTouch } from './input.js';
-import { unlockAudio, setEngine, sfx, toggleMute, isMuted } from './audio.js';
+import { setupInput, readInput, anyInput, isTouch, setTouchMode } from './input.js';
+import { unlockAudio, setEngine, sfx, toggleMute, isMuted, setMusicLevel, setVolumes, suspendAudio } from './audio.js';
+import { loadSettings, saveSettings, sanitize, cleanName } from './settings.js';
+import * as THREE from '../vendor/three.module.js';
 import * as startng from './startng.js';
 
 const $ = (id) => document.getElementById(id);
@@ -121,6 +123,7 @@ function setState(s) {
   $('touch').hidden = !(s === 'playing' && isTouch());
   $('player-card').hidden = !startngConnected || s === 'playing' || s === 'paused';
   if (s === 'menu') renderLevels();
+  setMusicLevel(s === 'playing' ? 0.32 : s === 'paused' ? 0.25 : 0.6);
 }
 
 // ---------- HUD ----------
@@ -197,6 +200,7 @@ function totals() {
 
 async function finishLevel() {
   run.finished = true;
+  sim.coasting = true;
   const time = score();
   const stars = starsFor(time);
   const prev = progress.levels[level.id];
@@ -277,9 +281,14 @@ async function openBoard() {
 // ---------- buttons ----------
 $('btn-board').onclick = openBoard;
 $('btn-board-close').onclick = () => ($('board').hidden = true);
-const soundLabel = () => ($('btn-sound').textContent = isMuted() ? '🔇 Sound off' : '🔊 Sound on');
+const soundLabel = () => {
+  $('btn-sound').textContent = isMuted() ? '🔇' : '🔊';
+  $('btn-sound').title = isMuted() ? 'Sound off' : 'Sound on';
+};
 soundLabel();
 $('btn-sound').onclick = () => { unlockAudio(); toggleMute(); soundLabel(); };
+// Browsers only allow sound after the player does something, so start it on the first tap or key.
+addEventListener('pointerdown', () => unlockAudio(), { once: true });
 $('btn-pause').onclick = () => pause();
 $('btn-restart').onclick = () => { if (state === 'playing') respawn(); };
 $('btn-resume').onclick = () => setState('playing');
@@ -288,6 +297,92 @@ $('btn-menu-p').onclick = () => goMenu();
 $('btn-retry').onclick = () => restartLevel();
 $('btn-menu').onclick = () => goMenu();
 $('btn-next').onclick = () => startLevel(Math.min(levelIndex + 1, LEVELS.length - 1));
+
+// ---------- settings ----------
+let settings = loadSettings();
+
+function applySettings() {
+  setVolumes({ master: settings.master / 100, music: settings.music / 100, sfx: settings.sfx / 100, engine: settings.engine / 100 });
+  world.setQuality(settings.quality);
+  setTouchMode(settings.touch);
+  $('touch').hidden = !(state === 'playing' && isTouch());
+  $('controls-help').textContent = isTouch()
+    ? 'Left: lean back / forward · Right: brake / GO'
+    : '↑ ride · ↓ brake · ← → lean · R restart · Esc pause';
+}
+
+// The name over the rider: your own pick, or your start.ng character's name.
+const riderName = () => settings.riderName || (startngConnected ? player.name : '');
+
+function openSettings() {
+  sfx.click();
+  const f = $('settings');
+  $('set-name').value = settings.riderName;
+  $('set-name').placeholder = startngConnected ? player.name : 'Rider';
+  $('set-nametag').checked = settings.nameTag;
+  for (const k of ['master', 'music', 'sfx', 'engine']) {
+    const input = $(`set-${k}`);
+    input.value = settings[k];
+    input.nextElementSibling.textContent = settings[k];
+  }
+  for (const [id, key] of [['set-quality', 'quality'], ['set-touch', 'touch']]) {
+    for (const b of $(id).children) b.classList.toggle('on', b.dataset.v === settings[key]);
+  }
+  f.hidden = false;
+}
+
+function updateSetting(key, value) {
+  settings = sanitize({ ...settings, [key]: value });
+  saveSettings(settings);
+  applySettings();
+}
+
+$('btn-settings').onclick = openSettings;
+$('btn-settings-p').onclick = openSettings;
+$('btn-settings-close').onclick = () => { sfx.click(); $('settings').hidden = true; };
+$('set-name').addEventListener('input', (e) => updateSetting('riderName', e.target.value));
+$('set-name').addEventListener('change', (e) => { e.target.value = cleanName(e.target.value); });
+$('set-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
+$('set-nametag').addEventListener('change', (e) => updateSetting('nameTag', e.target.checked));
+for (const k of ['master', 'music', 'sfx', 'engine']) {
+  $(`set-${k}`).addEventListener('input', (e) => {
+    unlockAudio();
+    e.target.nextElementSibling.textContent = e.target.value;
+    updateSetting(k, e.target.value);
+  });
+}
+for (const [id, key] of [['set-quality', 'quality'], ['set-touch', 'touch']]) {
+  for (const b of $(id).children) {
+    b.onclick = () => {
+      sfx.click();
+      for (const o of $(id).children) o.classList.toggle('on', o === b);
+      updateSetting(key, b.dataset.v);
+    };
+  }
+}
+$('btn-reset').onclick = () => {
+  if (!confirm('Reset all your stars and best times on this device? Scores already on the start.ng leaderboard stay there.')) return;
+  progress.levels = {};
+  progress.flips = 0;
+  saveProgress();
+  renderLevels();
+  sfx.click();
+};
+
+// Name tag follows the rider's head on screen.
+const tagPos = new THREE.Vector3();
+function updateNameTag() {
+  const tag = $('nametag');
+  const name = riderName();
+  const show = settings.nameTag && name && (state === 'playing' || state === 'finished') && !bike.thrown;
+  tag.hidden = !show;
+  if (!show) return;
+  if (tag.textContent !== name) tag.textContent = name;
+  bike.chassis.updateMatrixWorld();
+  tagPos.set(0.02, 1.75, 0).applyMatrix4(bike.chassis.matrixWorld).project(world.camera);
+  const x = (tagPos.x * 0.5 + 0.5) * innerWidth, y = (-tagPos.y * 0.5 + 0.5) * innerHeight;
+  tag.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -100%)`;
+}
 
 function pause() {
   if (state === 'playing') setState('paused');
@@ -303,19 +398,22 @@ setupInput({
     unlockAudio();
     if (code === 'KeyR' && state === 'playing') respawn();
     if ((code === 'Escape' || code === 'KeyP')) {
-      if (state === 'playing') pause();
+      if (!$('settings').hidden) $('settings').hidden = true;
+      else if (state === 'playing') pause();
       else if (state === 'paused') setState('playing');
       else if (!$('board').hidden) $('board').hidden = true;
     }
-    if (code === 'Enter' || code === 'Space') {
+    if ((code === 'Enter' || code === 'Space') && $('settings').hidden && $('board').hidden) {
       if (state === 'finished') ($('btn-next').hidden ? $('btn-retry') : $('btn-next')).click();
       else if (state === 'menu') startLevel(levelIndex);
     }
   },
 });
 const autoPause = !new URLSearchParams(location.search).has('nopause'); // ?nopause for automated tests
-document.addEventListener('visibilitychange', () => { if (document.hidden && autoPause) pause(); });
-if (isTouch()) $('controls-help').textContent = 'Left: lean back / forward · Right: brake / GO';
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && autoPause) pause();
+  suspendAudio(document.hidden);
+});
 
 // ---------- game loop ----------
 function physicsStep(input) {
@@ -385,13 +483,13 @@ function frame(dt) {
     bike.update(sim.snapshot(), { lean: input.lean, time: clock, speed: sim.speed });
     world.follow(p, sim.chassis.getLinearVelocity(), !sim.rearGround && !sim.frontGround, dt);
   } else if (state === 'finished') {
-    // Let the bike roll to a stop past the line.
+    // Let the bike roll to a quiet stop past the line.
     acc += dt;
     while (acc >= STEP) {
-      physicsStep({ throttle: 0, brake: 1, lean: 0 });
+      sim.step({ throttle: 0, brake: 0, lean: 0 }, STEP);
       acc -= STEP;
     }
-    setEngine(sim.speed, 0, true);
+    setEngine(0, 0, false);
     bike.update(sim.snapshot(), { time: clock, speed: sim.speed });
     world.follow(sim.chassis.getPosition(), sim.chassis.getLinearVelocity(), false, dt);
   } else if (state === 'menu') {
@@ -416,8 +514,10 @@ function frame(dt) {
 
   world.animateFlags(clock);
   world.render();
+  updateNameTag();
 }
 
+applySettings();
 loadLevel(0);
 setState('menu');
 refreshPlayer();

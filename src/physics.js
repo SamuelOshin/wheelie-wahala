@@ -21,6 +21,7 @@ export const TUNING = {
   brakeTorque: 14,
   reverseSpeed: 14,
   reverseTorque: 5,
+  coastBrake: 6,
   rollingTorque: 0.25,
   groundLeanTorque: 14,
   airSpin: 8.5, // rad/s you can spin at in the air
@@ -107,6 +108,7 @@ export class BikeSim {
     place(this.front, ...t.frontWheel, 0);
     this.progress = spawn.s;
     this.crashed = false;
+    this.coasting = false;
     this.airTime = 0;
     this.airSpin = 0;
     this.lastAngle = spawn.angle;
@@ -153,7 +155,15 @@ export class BikeSim {
     // Brief hops off bumps still count as on the ground for control.
     const airborne = !this.rearGround && !this.frontGround && this.airTime > 0.1;
 
-    if (!this.crashed) {
+    if (this.coasting) {
+      // Past the finish line: a gentle rear brake, no reverse, nothing to control.
+      this.rearJoint.setMotorSpeed(0);
+      this.rearJoint.setMaxMotorTorque(t.coastBrake);
+      this.frontJoint.setMotorSpeed(0);
+      this.frontJoint.setMaxMotorTorque(t.rollingTorque);
+      const w = this.chassis.getAngularVelocity();
+      this.chassis.setAngularVelocity(w * Math.exp(-t.groundDamping * dt));
+    } else if (!this.crashed) {
       const rearSpeed = this.rear.getAngularVelocity();
       if (input.throttle) {
         this.rearJoint.setMotorSpeed(-t.topSpeed);
@@ -227,6 +237,7 @@ export class BikeSim {
       this.airSpin = 0;
     }
 
+    if (this.coasting) return [];
     if (!this.crashed && this.riderHitsTrack()) {
       this.crashed = true;
       events.push({ type: 'crash' });
