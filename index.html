@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <title>Wheelie Wahala</title>
+  <meta name="description" content="A 3D stunt bike racer for start.ng. Flip, loop and race across the desert as your own start.ng character.">
+  <meta name="theme-color" content="#f9a826">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- In-game HUD -->
+  <div id="hud" hidden>
+    <button id="btn-restart" class="round" aria-label="Restart from checkpoint" title="Restart (R)">
+      <svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/></svg>
+    </button>
+    <div class="hud-center">
+      <div id="hud-level"></div>
+      <div id="hud-time">0:00.00</div>
+      <div id="hud-flips"></div>
+    </div>
+    <button id="btn-pause" class="round" aria-label="Pause" title="Pause (Esc)">
+      <svg viewBox="0 0 24 24"><path d="M7 5h4v14H7zM13 5h4v14h-4z"/></svg>
+    </button>
+    <div id="hint"></div>
+    <div id="popups"></div>
+  </div>
+
+  <!-- Touch controls -->
+  <div id="touch" hidden>
+    <div class="pad left">
+      <button data-control="back" aria-label="Lean back">◀</button>
+      <button data-control="forward" aria-label="Lean forward">▶</button>
+    </div>
+    <div class="pad right">
+      <button data-control="brake" class="brake" aria-label="Brake">BRAKE</button>
+      <button data-control="throttle" class="go" aria-label="Throttle">GO</button>
+    </div>
+  </div>
+
+  <!-- Player card (start.ng character) -->
+  <div class="startng-card" id="player-card" hidden>
+    <img id="player-face" alt="">
+    <div>
+      <b id="player-name"></b>
+      <span id="player-account"></span>
+    </div>
+    <button id="player-sign-in" hidden>Sign in</button>
+  </div>
+
+  <!-- Title / level select -->
+  <section id="menu" class="screen">
+    <div class="logo">
+      <span class="logo-top">Wheelie</span>
+      <span class="logo-bottom">Wahala!</span>
+    </div>
+    <p class="tagline">Flip it. Loop it. Land it.</p>
+    <div id="levels" class="levels"></div>
+    <div class="menu-row">
+      <button id="btn-board" class="pill">🏆 Leaderboard</button>
+      <button id="btn-sound" class="pill">🔊 Sound</button>
+    </div>
+    <p class="controls-help" id="controls-help">↑ ride · ↓ brake · ← → lean · R restart · Esc pause</p>
+  </section>
+
+  <!-- Pause -->
+  <section id="pause" class="screen dim" hidden>
+    <div class="panel">
+      <h2>Paused</h2>
+      <button id="btn-resume" class="big">Resume</button>
+      <button id="btn-retry-p" class="pill">Restart level</button>
+      <button id="btn-menu-p" class="pill">Levels</button>
+    </div>
+  </section>
+
+  <!-- Stage clear -->
+  <section id="finish" class="screen" hidden>
+    <div class="banner">STAGE CLEAR!</div>
+    <div class="panel card">
+      <div class="stars" id="stars"><span>★</span><span>★</span><span>★</span></div>
+      <div class="result">
+        <div><small>Time</small><b id="res-time"></b></div>
+        <div><small>Flips</small><b id="res-flips"></b></div>
+        <div><small>Best</small><b id="res-best"></b></div>
+      </div>
+      <p id="res-note"></p>
+      <p id="res-save"></p>
+      <div class="menu-row">
+        <button id="btn-retry" class="pill">↻ Retry</button>
+        <button id="btn-menu" class="pill">Levels</button>
+        <button id="btn-next" class="big">Next ▶</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Leaderboard -->
+  <section id="board" class="screen dim" hidden>
+    <div class="panel wide">
+      <h2>Leaderboard</h2>
+      <table>
+        <thead><tr><th>#</th><th>Rider</th><th>★</th><th>Flips</th><th>Time</th></tr></thead>
+        <tbody id="board-rows"></tbody>
+      </table>
+      <p id="board-note"></p>
+      <button id="btn-board-close" class="pill">Close</button>
+    </div>
+  </section>
+
+  <div id="rotate">📱↻<br>Turn your phone sideways to ride</div>
+
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
