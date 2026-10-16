@@ -47,7 +47,12 @@ export const isGuestVisit = () => new URLSearchParams(location.search).has('gues
 // { user, guest } or null when start.ng isn't there.
 export async function whoami() {
   if (!onStartNg()) return null;
-  const reply = await askStartNg({ type: 'startng:whoami' }, 'startng:user');
+  // The connect page can miss a message sent while it is still starting up (slow
+  // connections), so ask a few times before giving up.
+  let reply = null;
+  for (let attempt = 0; attempt < 4 && !reply; attempt++) {
+    reply = await askStartNg({ type: 'startng:whoami' }, 'startng:user', 2500 + attempt * 1500);
+  }
   if (!reply) return null;
   return { user: reply.user ?? null, guest: reply.guest ?? null };
 }

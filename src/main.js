@@ -32,8 +32,16 @@ function saveProgress() {
 // ---------- player (start.ng character) ----------
 const player = { signedIn: false, name: 'Rider', account: null, face: null, style: DEFAULT_STYLE, id: null };
 
-async function refreshPlayer() {
+let refreshing = null, lookups = 0;
+function refreshPlayer() {
+  refreshing ??= lookUpPlayer().finally(() => (refreshing = null));
+  return refreshing;
+}
+
+async function lookUpPlayer() {
   const who = await startng.whoami();
+  // On start.ng but no answer yet (slow connection): keep trying for a while.
+  if (!who && startng.onStartNg() && !startngConnected && ++lookups < 8) setTimeout(refreshPlayer, 4000);
   const p = who?.user ?? who?.guest;
   const before = JSON.stringify(player.style);
   if (p) {
@@ -44,7 +52,7 @@ async function refreshPlayer() {
     player.style = p.style ?? DEFAULT_STYLE;
     player.id = who.user?.id ?? null;
   }
-  renderPlayerCard(!!who);
+  renderPlayerCard(!!who || startngConnected);
   if (JSON.stringify(player.style) !== before) bike.setStyle(player.style);
 }
 
@@ -294,6 +302,8 @@ $('btn-restart').onclick = () => { if (state === 'playing') respawn(); };
 $('btn-resume').onclick = () => setState('playing');
 $('btn-retry-p').onclick = () => restartLevel();
 $('btn-menu-p').onclick = () => goMenu();
+// Leaving the game only makes sense on start.ng; elsewhere there's nowhere to go back to.
+$('btn-exit').hidden = !startng.onStartNg();
 $('btn-retry').onclick = () => restartLevel();
 $('btn-menu').onclick = () => goMenu();
 $('btn-next').onclick = () => startLevel(Math.min(levelIndex + 1, LEVELS.length - 1));

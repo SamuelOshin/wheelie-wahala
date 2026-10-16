@@ -67,7 +67,7 @@ button { font: inherit; cursor: pointer; color: inherit; }
 .level .best { font-size: 13px; opacity: .7; min-height: 1.2em; }
 .level.locked { opacity: .55; cursor: not-allowed; }
 .menu-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
-.pill { border: 0; border-radius: 999px; padding: 11px 20px; background: #fff; box-shadow: 0 4px 0 rgba(120,40,10,.45); font-weight: 800; }
+.pill { text-decoration: none; color: inherit; display: inline-flex; align-items: center; gap: 6px; border: 0; border-radius: 999px; padding: 11px 20px; background: #fff; box-shadow: 0 4px 0 rgba(120,40,10,.45); font-weight: 800; }
 .pill:active { transform: translateY(2px); box-shadow: 0 2px 0 rgba(120,40,10,.45); }
 .big { border: 0; border-radius: 999px; padding: 12px 30px; background: var(--green); color: #fff; font: 22px var(--display); box-shadow: 0 5px 0 #1f7a37; text-shadow: 0 2px 0 #1f7a37; }
 .big:active { transform: translateY(3px); box-shadow: 0 2px 0 #1f7a37; }
