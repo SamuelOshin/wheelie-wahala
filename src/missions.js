@@ -14,6 +14,7 @@ const POOL = {
   daily: { tiers: [[1, 60]], text: () => "Finish today's Daily Challenge" },
   frenzy: { tiers: [[1500, 40], [3000, 80], [6000, 150]], text: (n) => `Score ${n.toLocaleString('en')} in Flip Frenzy` },
   stars: { tiers: [[1, 40], [2, 80]], text: (n) => `Earn ${n} new star${n > 1 ? 's' : ''}` },
+  crates: { tiers: [[5, 30], [15, 60], [30, 100]], text: (n) => `Smash ${n} crates` },
 };
 
 // Missions where progress is "best value" rather than "add up".

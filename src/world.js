@@ -1,4 +1,4 @@
-// The three.js scene: sky, desert scenery, track meshes, flags and the camera.
+// The three.js scene: sky, scenery for each world, track meshes, flags and the camera.
 import * as THREE from '../vendor/three.module.js';
 import { toon, limb } from './rider.js';
 import { spawnAtX } from './track.js';
@@ -10,15 +10,37 @@ const THEMES = {
     floor: '#eab48c',
     rocks: ['#d98760', '#c9744f', '#e19a73', '#cf805c'],
     sun: '#fff3c4',
+    kind: 'desert',
+  },
+  // Lagos: lagoon water, the skyline, the Third Mainland Bridge with yellow danfos on it.
+  lagos: {
+    sky: ['#3fa9e6', '#9edcf6', '#ffe1b0'],
+    fog: '#c3e6f2',
+    floor: '#2f8fb3',
+    buildings: ['#e9d8bd', '#c9d7e2', '#f2bd86', '#9fb6c9', '#d6c3e0', '#bfe0cf'],
+    sun: '#fff8dc',
+    kind: 'city',
+  },
+  ice: {
+    sky: ['#5fb0ec', '#b9e1fb', '#f2faff'],
+    fog: '#e1f2ff',
+    floor: '#f4f9ff',
+    rocks: ['#9fb7d1', '#8aa6c4', '#b3c7dc'],
+    sun: '#ffffff',
+    kind: 'ice',
   },
 };
+export const THEME_NAMES = Object.keys(THEMES);
 
 const STYLES = {
   ground: { front: '#9a4422', spots: '#86391b', crust: '#e59a5a', top: '#f0b778', thick: 0.45, depth: 7 },
   line: { front: '#8e1b1b', top: '#a62424', thick: 0.12, depth: 1.4 },
   wood: { front: '#b4612c', spots: '#9f5324', crust: '#f2ab60', top: '#f6bf7c', under: '#7d3c18', thick: 0.55, depth: 2.2 },
   ice: { front: '#3d7cc6', spots: '#3570b6', crust: '#bfe6ff', top: '#e0f4ff', under: '#2a5e9c', thick: 0.55, depth: 2.2 },
+  road: { front: '#6a717c', spots: '#5d646f', crust: '#f2c230', top: '#3d4149', under: '#4b5059', thick: 0.6, depth: 3.2 },
+  snow: { front: '#8ea8c3', spots: '#7f99b6', crust: '#ffffff', top: '#f3faff', thick: 0.5, depth: 7, ground: true },
 };
+STYLES.ground.ground = true;
 
 // Small seeded random so every level's scenery is the same each time.
 function rng(seed) {
@@ -130,7 +152,7 @@ function trackMesh(chain, bottomY) {
   // Riding surface.
   group.add(strip(row(0, zB), row(0, zF), toon(st.top, { side })));
 
-  if (chain.style === 'ground') {
+  if (st.ground) {
     // Lighter crust, then the earth all the way down.
     group.add(strip(row(0, zF), row(st.thick, zF), toon(st.crust, { side })));
     const down = pts.map((p, i) => new THREE.Vector3(p.x - nrm[i].x * st.thick, bottomY, zF));
@@ -172,6 +194,64 @@ function heightProfile(track, x0, x1, step = 4) {
     if (i >= 0) out[i] = sum / count;
   }
   return (x) => out[Math.max(0, Math.min(n - 1, Math.round((x - x0) / step)))];
+}
+
+// Light walls with darker windows; tinted by each building's colour.
+let winTex;
+function windowTexture() {
+  if (winTex) return winTex;
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#ffffff';
+  g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#6f8aa6';
+  for (let y = 8; y < 64; y += 22) for (let x = 8; x < 64; x += 22) g.fillRect(x, y, 12, 12);
+  winTex = new THREE.CanvasTexture(c);
+  winTex.colorSpace = THREE.SRGBColorSpace;
+  winTex.wrapS = winTex.wrapT = THREE.RepeatWrapping;
+  return winTex;
+}
+
+function crateTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = '#c8873f';
+  g.fillRect(0, 0, 64, 64);
+  g.strokeStyle = '#8a5523';
+  g.lineWidth = 6;
+  g.strokeRect(3, 3, 58, 58);
+  g.beginPath();
+  g.moveTo(6, 6);
+  g.lineTo(58, 58);
+  g.moveTo(58, 6);
+  g.lineTo(6, 58);
+  g.stroke();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+
+function chevronTexture() {
+  const c = document.createElement('canvas');
+  c.width = c.height = 64;
+  const g = c.getContext('2d');
+  g.fillStyle = 'rgba(255,140,0,.55)';
+  g.fillRect(0, 0, 64, 64);
+  g.fillStyle = '#fff36b';
+  g.beginPath();
+  g.moveTo(10, 6);
+  g.lineTo(34, 32);
+  g.lineTo(10, 58);
+  g.lineTo(24, 58);
+  g.lineTo(48, 32);
+  g.lineTo(24, 6);
+  g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.wrapS = THREE.RepeatWrapping;
+  return t;
 }
 
 function flag(colorA, colorB, checkered) {
@@ -259,6 +339,9 @@ export class World {
     this.levelGroup = new THREE.Group();
     this.scene.add(this.levelGroup);
     this.flags = [];
+    this.movers = [];
+    this.dyn = [];
+    this.boostTex = [];
   }
 
   buildLevel(level, track) {
@@ -312,6 +395,8 @@ export class World {
 
   // base(x): ground height of the desert floor at x.
   addScenery(level, theme, x0, x1, base, track) {
+    if (theme.kind === 'city') return this.addCity(level, theme, x0, x1, base);
+    if (theme.kind === 'ice') return this.addIce(level, theme, x0, x1, base, track);
     const r = rng(level.id);
     const rockMats = theme.rocks.map((c) => toon(c, { flatShading: true }));
     const g = this.levelGroup;
@@ -374,6 +459,186 @@ export class World {
         }
       }
     }
+  }
+
+  addSun(theme, x0, base) {
+    const sun = new THREE.Mesh(new THREE.CircleGeometry(22, 32), new THREE.MeshBasicMaterial({ color: theme.sun, fog: false }));
+    sun.position.set(x0 + 140, base(x0 + 120) + 100, -420);
+    this.levelGroup.add(sun);
+    this.sunDisc = sun;
+  }
+
+  // Lagos: skyline, the Third Mainland Bridge with danfos driving on it, palms by the lagoon.
+  addCity(level, theme, x0, x1, base) {
+    const r = rng(level.id);
+    const g = this.levelGroup;
+    this.addSun(theme, x0, base);
+    const win = windowTexture();
+    const mats = theme.buildings.map((c) => toon(c, { map: win }));
+    for (let layer = 0; layer < 3; layer++) {
+      const zMin = [-75, -140, -230][layer], zMax = [-110, -200, -330][layer];
+      const step = [13, 18, 26][layer];
+      for (let x = x0; x < x1 + layer * 150; x += step * (0.5 + r())) {
+        const w = 6 + r() * 10, d = 6 + r() * 8, h = 14 + r() * (26 + layer * 30);
+        const geo = new THREE.BoxGeometry(w, h, d);
+        // Scale the UVs so windows stay the same size on every building.
+        const uv = geo.attributes.uv;
+        for (let i = 0; i < uv.count; i++) uv.setXY(i, (uv.getX(i) * w) / 3.2, (uv.getY(i) * h) / 3.2);
+        const b = new THREE.Mesh(geo, mats[Math.floor(r() * mats.length)]);
+        b.position.set(x, base(x) + h / 2 - 1, zMin + (zMax - zMin) * r());
+        g.add(b);
+      }
+    }
+    // The bridge: a long deck on pillars across the lagoon.
+    const deckZ = -48, deckMat = toon('#d9d4c7'), railMat = toon('#b9b2a2'), pillarMat = toon('#c8c1b0');
+    const deckY = (x) => base(x) + 10;
+    for (let x = x0; x < x1; x += 20) {
+      const ya = deckY(x), yb = deckY(x + 20);
+      const piece = new THREE.Mesh(new THREE.BoxGeometry(20.6, 1.1, 9), deckMat);
+      piece.position.set(x + 10, (ya + yb) / 2, deckZ);
+      piece.rotation.z = Math.atan2(yb - ya, 20);
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(20.6, 0.5, 0.3), railMat);
+      rail.position.set(x + 10, (ya + yb) / 2 + 0.8, deckZ + 4.4);
+      rail.rotation.z = piece.rotation.z;
+      g.add(piece, rail);
+      if (Math.round((x - x0) / 20) % 2 === 0) {
+        const pillar = new THREE.Mesh(new THREE.BoxGeometry(1.6, 12, 1.6), pillarMat);
+        pillar.position.set(x, ya - 6, deckZ);
+        g.add(pillar);
+      }
+    }
+    // Yellow danfo buses with their black stripes, driving both ways.
+    this.movers = [];
+    const yellow = toon('#f7c600'), black = toon('#1d1d1d'), glass = toon('#9cc9e0');
+    for (let i = 0; i < Math.ceil((x1 - x0) / 45); i++) {
+      const bus = new THREE.Group();
+      bus.add(new THREE.Mesh(new THREE.BoxGeometry(4.2, 1.7, 1.8), yellow));
+      const stripe = new THREE.Mesh(new THREE.BoxGeometry(4.22, 0.22, 1.82), black);
+      stripe.position.y = -0.2;
+      const windows = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.5, 1.84), glass);
+      windows.position.y = 0.42;
+      bus.add(stripe, windows);
+      const dir = i % 2 ? 1 : -1;
+      bus.position.z = deckZ + (dir > 0 ? 1.9 : -1.9);
+      g.add(bus);
+      this.movers.push({ mesh: bus, x: x0 + r() * (x1 - x0), speed: dir * (9 + r() * 6), x0, x1, y: (x) => deckY(x) + 1.4 });
+    }
+    // Palms along the lagoon shore.
+    const trunk = toon('#9a6b3f'), leaf = toon('#3f9b4a');
+    for (let x = x0; x < x1; x += 9 + r() * 14) {
+      const palm = new THREE.Group();
+      const h = 6 + r() * 4, lean = (r() - 0.5) * 1.6;
+      palm.add(limb(new THREE.Vector3(0, 0, 0), new THREE.Vector3(lean, h, 0), 0.22, trunk));
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2;
+        palm.add(limb(new THREE.Vector3(lean, h, 0), new THREE.Vector3(lean + Math.cos(a) * 2.6, h - 1.1, Math.sin(a) * 2.6), 0.16, leaf));
+      }
+      palm.position.set(x, base(x), -16 - r() * 22);
+      g.add(palm);
+    }
+  }
+
+  // Ice: snowy peaks in layers, pine trees, white floor.
+  addIce(level, theme, x0, x1, base, track) {
+    const r = rng(level.id);
+    const g = this.levelGroup;
+    this.addSun(theme, x0, base);
+    const rockMats = theme.rocks.map((c) => toon(c, { flatShading: true }));
+    const snowMat = toon('#ffffff', { flatShading: true });
+    for (let layer = 0; layer < 3; layer++) {
+      const zMin = [-60, -130, -220][layer], zMax = [-100, -200, -320][layer];
+      const step = [24, 34, 50][layer];
+      for (let x = x0; x < x1 + layer * 150; x += step * (0.5 + r())) {
+        const h = 22 + r() * (30 + layer * 30), rad = h * (0.55 + r() * 0.3);
+        const z = zMin + (zMax - zMin) * r();
+        const peak = new THREE.Mesh(new THREE.ConeGeometry(rad, h, 6), rockMats[Math.floor(r() * rockMats.length)]);
+        peak.position.set(x, base(x) + h / 2 - 2, z);
+        peak.rotation.y = r() * 3;
+        const cap = new THREE.Mesh(new THREE.ConeGeometry(rad * 0.42, h * 0.42, 6), snowMat);
+        cap.position.set(x, base(x) + h - 2 - h * 0.21 + 0.3, z);
+        cap.rotation.y = peak.rotation.y;
+        g.add(peak, cap);
+      }
+    }
+    const pine = toon('#2f6b4f'), trunk = toon('#6b4a2f');
+    const tree = (x, y, z, sc) => {
+      const t = new THREE.Group();
+      t.add(limb(new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 1.2 * sc, 0), 0.15 * sc, trunk));
+      for (let k = 0; k < 3; k++) {
+        const cone = new THREE.Mesh(new THREE.ConeGeometry((1.4 - k * 0.35) * sc, 1.8 * sc, 7), pine);
+        cone.position.y = (1.4 + k * 1.0) * sc;
+        t.add(cone);
+      }
+      const tip = new THREE.Mesh(new THREE.ConeGeometry(0.4 * sc, 0.6 * sc, 7), snowMat);
+      tip.position.y = 3.75 * sc;
+      t.add(tip);
+      t.position.set(x, y, z);
+      g.add(t);
+    };
+    for (let x = x0; x < x1; x += 7 + r() * 12) tree(x, base(x), -18 - r() * 30, 1.6 + r() * 1.4);
+    // Small pines beside snowy ground track.
+    for (const ch of track.chains) {
+      if (ch.style !== 'snow') continue;
+      for (let i = 6; i < ch.points.length; i += 14 + Math.floor(r() * 16)) {
+        const p = ch.points[i];
+        tree(p.x, p.y, -1.6 - r() * 1.8, 0.45 + r() * 0.3);
+      }
+    }
+  }
+
+  // Meshes for the physics pieces: see-saw planks, crates and boost pads.
+  attachDynamics(sim) {
+    const plankMat = toon('#b8793f');
+    const crateMat = toon('#ffffff', { map: crateTexture() });
+    this.dyn = sim.dynamics.map((d) => {
+      const mesh = d.kind === 'plank'
+        ? new THREE.Mesh(new THREE.BoxGeometry(d.hw * 2, d.hh * 2, 2.4), plankMat)
+        : new THREE.Mesh(new THREE.BoxGeometry(d.hw * 2, d.hh * 2, d.hw * 2), crateMat);
+      mesh.castShadow = true;
+      this.levelGroup.add(mesh);
+      return { d, mesh };
+    });
+    // See-saw pivots.
+    for (const sw of sim.track.seesaws) {
+      const post = new THREE.Mesh(new THREE.ConeGeometry(0.7, 1.6, 4), toon('#6b6f78'));
+      post.position.set(sw.x0 + sw.len / 2, sw.y - 0.6, 0);
+      this.levelGroup.add(post);
+    }
+    // Boost pads: glowing chevrons that scroll.
+    this.boostTex = [];
+    for (const b of sim.track.boosts) {
+      const tex = chevronTexture();
+      tex.repeat.set((b.x1 - b.x0) / 1.8, 1);
+      this.boostTex.push(tex);
+      const pad = new THREE.Mesh(new THREE.PlaneGeometry(b.x1 - b.x0, 1.8),
+        new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+      pad.rotation.x = -Math.PI / 2;
+      pad.position.set((b.x0 + b.x1) / 2, b.y + 0.03, 0);
+      this.levelGroup.add(pad);
+    }
+    this.syncDynamics();
+  }
+
+  syncDynamics() {
+    for (const { d, mesh } of this.dyn ?? []) {
+      mesh.visible = d.body.isActive();
+      const p = d.body.getPosition();
+      mesh.position.set(p.x, p.y, 0);
+      mesh.rotation.z = d.body.getAngle();
+    }
+  }
+
+  // Everything that moves on its own: flags, buses, boost chevrons.
+  animate(time) {
+    this.animateFlags(time);
+    for (const m of this.movers ?? []) {
+      const span = m.x1 - m.x0;
+      const x = m.x0 + ((((m.x - m.x0 + m.speed * time) % span) + span) % span);
+      m.mesh.position.x = x;
+      m.mesh.position.y = m.y(x);
+      m.mesh.rotation.y = m.speed > 0 ? 0 : Math.PI;
+    }
+    for (const t of this.boostTex ?? []) t.offset.x = -time * 2.5;
   }
 
   // Follow the bike: look ahead in the direction of travel, pull back with speed and air.

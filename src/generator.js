@@ -21,12 +21,18 @@ const TEMPLATES = {
   bumps: () => [['bumps', 32, 0.4, 3], ['flat', 8]],
   climb: (r) => [['slope', r.range(22, 28), r.range(4, 6)], ['checkpoint'], ['flat', 10]],
   loop: (r) => [['flat', 8], ['slope', 36, -r.range(7, 9)], ['flat', 16], ['loop', 4.5], ['flat', 16], ['checkpoint'], ['flat', 6]],
+  boostKick: (r) => {
+    const h = r.range(4.5, 5.5);
+    return [['flat', 6], ['boost', 10], ['ramp', Math.max(13, h * 2.5), h], ['gap', r.range(20, 23), -r.range(7, 10)], ['slope', 26, -r.range(5, 7)], ['checkpoint'], ['flat', 8]];
+  },
+  smash: (r) => [['flat', 14], ['crates', r.int(3, 5)], ['flat', 18]],
+  seesaw: (r) => [['flat', 8], ['seesaw', r.pick([10, 12])], ['flat', 14], ['checkpoint'], ['flat', 6]],
 };
 
 // How often each section turns up, by mode.
 const MIXES = {
-  daily: { runway: 1, kicker: 4, bigKicker: 2, drop: 2, hills: 2, bumps: 1, climb: 2, loop: 1.2 },
-  frenzy: { runway: 0.5, kicker: 5, bigKicker: 3, drop: 2.5, hills: 1, bumps: 0.5, climb: 2.2, loop: 0.8 },
+  daily: { runway: 1, kicker: 4, bigKicker: 2, drop: 2, hills: 2, bumps: 1, climb: 2, loop: 1.2, boostKick: 1.5, smash: 1.2, seesaw: 1 },
+  frenzy: { runway: 0.5, kicker: 5, bigKicker: 3, drop: 2.5, hills: 1, bumps: 0.5, climb: 2.2, loop: 0.8, boostKick: 2.5, smash: 0.8, seesaw: 0.6 },
 };
 
 function weightedPick(r, weights, allowed) {
@@ -39,7 +45,8 @@ function weightedPick(r, weights, allowed) {
   return keys[keys.length - 1];
 }
 
-const STYLES = ['ground', 'line', 'wood'];
+// Each world and the track styles that suit it.
+const WORLD_STYLES = { desert: ['ground', 'line', 'wood'], lagos: ['road', 'road', 'line'], ice: ['snow', 'ice'] };
 
 // Rough height change of a section, so the course doesn't drift off the bottom of the world.
 function heightChange(pieces) {
@@ -53,7 +60,8 @@ function heightChange(pieces) {
 // mode: 'daily' | 'frenzy'. length: metres of course to aim for.
 export function generateCourse(seed, { mode = 'daily', length = 380 } = {}) {
   const r = rng(`${mode}:${seed}`);
-  const style = r.pick(STYLES);
+  const theme = r.pick(Object.keys(WORLD_STYLES));
+  const style = r.pick(WORLD_STYLES[theme]);
   const pieces = [['flat', 18]];
   let x = 18, y = 0, last = '', kickers = 0;
   while (x < length) {
@@ -66,7 +74,7 @@ export function generateCourse(seed, { mode = 'daily', length = 380 } = {}) {
     pieces.push(...section);
     for (const [kind, a = 0] of section) if (kind !== 'checkpoint' && kind !== 'style' && kind !== 'loop') x += a;
     y += heightChange(section);
-    if (pick === 'kicker' || pick === 'bigKicker' || pick === 'drop') kickers++;
+    if (['kicker', 'bigKicker', 'drop', 'boostKick'].includes(pick)) kickers++;
     last = pick;
   }
   pieces.push(['flat', 20]);
@@ -74,6 +82,8 @@ export function generateCourse(seed, { mode = 'daily', length = 380 } = {}) {
     id: `${mode}-${seed}`,
     mode,
     name: mode === 'daily' ? 'Daily Challenge' : 'Flip Frenzy',
+    theme,
+    grip: theme === 'ice' ? 0.5 : undefined,
     style,
     start: [0, 0],
     pieces,

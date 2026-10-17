@@ -22,6 +22,11 @@ export function autopilotInput(sim) {
     const c = sim.chassis.getPosition(), v = sim.chassis.getLinearVelocity();
     const err = norm(sim.chassis.getAngle() - groundBelow(sim, c.x + v.x * 0.5));
     lean = err > 0.12 ? -1 : err < -0.12 ? 1 : 0;
+  } else if (sim.contactSeg) {
+    // On the ground: lean against wheelies and nose-dives, like a person would.
+    const g = sim.contactSeg;
+    const err = norm(sim.chassis.getAngle() - Math.atan2(g.by - g.ay, g.bx - g.ax));
+    lean = err > 0.3 ? -1 : err < -0.3 ? 1 : 0;
   }
   return { throttle: 1, brake: 0, lean };
 }

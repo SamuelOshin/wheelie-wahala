@@ -1,6 +1,8 @@
 # Wheelie Wahala: roadmap to a game people play every day
 
-Status: **Phase 1 (Flip Fever) and Phase 2 (Come Back Tomorrow) are live.** Live today: 3 desert levels, flips, loops, start.ng rider, leaderboard,
+Status: **Phases 1–3 are live**: Flip Fever, Come Back Tomorrow, and Lagos & Ice (30 levels, boost pads,
+see-saws, crates, level editor). Moving lifts were left out: the autopilot can't time them, so their
+levels couldn't be proven beatable. Live today: 3 desert levels, flips, loops, start.ng rider, leaderboard,
 settings. About 1–2 minutes of content.
 
 ## 1. Where we are, honestly

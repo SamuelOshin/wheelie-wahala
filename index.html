@@ -84,7 +84,7 @@
         <span class="mode-sub" id="frenzy-sub">Flip as much as you can</span>
       </button>
     </div>
-    <div id="levels" class="levels"></div>
+    <div id="worlds" class="worlds"></div>
     <div class="menu-row">
       <button id="btn-missions" class="pill">🎯 Missions <span class="badge" id="missions-badge" hidden></span></button>
       <button id="btn-board" class="pill">🏆 Leaderboard</button>
@@ -94,6 +94,18 @@
     </div>
     <p class="lifetime-menu" id="menu-lifetime" hidden></p>
     <p class="controls-help" id="controls-help">↑ ride · ↓ brake · ← → lean · R checkpoint · T restart · Esc pause</p>
+  </section>
+
+  <!-- A world's levels -->
+  <section id="world" class="screen" hidden>
+    <div class="world-head">
+      <button id="btn-world-back" class="pill">‹ Back</button>
+      <div>
+        <h2 id="world-name"></h2>
+        <p id="world-stars"></p>
+      </div>
+    </div>
+    <div id="levels" class="level-grid"></div>
   </section>
 
   <!-- Pause -->
@@ -205,6 +217,7 @@
       </fieldset>
 
       <div class="menu-row">
+        <a class="pill" href="editor/">✎ Level editor</a>
         <button id="btn-reset" class="pill danger">Reset progress</button>
         <button id="btn-settings-close" class="big">Done</button>
       </div>

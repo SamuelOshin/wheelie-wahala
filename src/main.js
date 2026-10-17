@@ -3,7 +3,7 @@ import { World } from './world.js';
 import { BikeModel } from './bike.js';
 import { BikeSim } from './physics.js';
 import { buildTrack } from './track.js';
-import { LEVELS } from './levels.js';
+import { LEVELS, WORLDS } from './levels.js';
 import { DEFAULT_STYLE } from './rider.js';
 import { FlipTracker } from './flips.js';
 import { Particles, buzz } from './fx.js';
@@ -190,7 +190,7 @@ world.scene.add(bike.root, ghostBike.root);
 const particles = new Particles(world.scene);
 
 let state = 'menu'; // menu | playing | paused | finished
-let mode = 'level'; // level | daily | frenzy
+let mode = 'level'; // level | daily | frenzy | custom (a test ride from the level editor)
 let levelIndex = 0;
 let level, track, sim;
 let run; // the current attempt
@@ -205,6 +205,7 @@ function loadCourse(course, courseMode) {
   track = buildTrack(level);
   sim = new BikeSim(track);
   world.buildLevel(level, track);
+  world.attachDynamics(sim);
   world.scene.add(bike.root, ghostBike.root);
   particles.attach(world.scene);
   sim.reset(track.checkpoints[0]);
@@ -214,9 +215,9 @@ function loadCourse(course, courseMode) {
     started: false, time: 0, checkpoint: 0, crashTimer: 0, finished: false, goalShown: false,
     saved: tricks.snapshot(), crashes: 0, timeLeft: FRENZY_TIME, bonusTime: 0,
   };
-  ghost = mode !== 'frenzy' && settings.ghost ? loadGhost(level.id) : null;
+  ghost = (mode === 'level' || mode === 'daily') && settings.ghost ? loadGhost(level.id) : null;
   ghostBike.root.visible = false;
-  recorder = mode !== 'frenzy' ? new GhostRecorder() : null;
+  recorder = mode === 'level' || mode === 'daily' ? new GhostRecorder() : null;
   slowmo = 0;
   world.camState = null;
 }
@@ -236,7 +237,9 @@ function beginRun(name) {
 
 function startLevel(i) {
   loadLevel(i);
-  beginRun(`${i + 1}. ${level.name}`);
+  const w = worldOf(level);
+  const n = LEVELS.filter((l) => (l.world ?? 'desert') === w.id).indexOf(level) + 1;
+  beginRun(`${w.name} ${n} · ${level.name}`);
 }
 
 // Today's course: generated from the date, checked by the autopilot (a variant is tried if
@@ -246,7 +249,7 @@ function dailyCourse() {
   const date = todayUTC();
   if (dailyCache?.date === date) return dailyCache.course;
   let saved = null;
-  try { saved = JSON.parse(localStorage.getItem('wheelie-wahala-daily')); } catch {}
+  try { saved = JSON.parse(localStorage.getItem('wheelie-wahala-daily-v2')); } catch {}
   let course;
   if (saved?.date === date) {
     course = generateCourse(`${date}#${saved.variant}`, { mode: 'daily' });
@@ -257,7 +260,7 @@ function dailyCourse() {
       const res = rideCourse(course, { maxTime: 90 });
       if (res.finished || v === 5) {
         course.time = Math.ceil(res.finished ? res.time * 1.12 : course.time);
-        try { localStorage.setItem('wheelie-wahala-daily', JSON.stringify({ date, variant: v, time: course.time })); } catch {}
+        try { localStorage.setItem('wheelie-wahala-daily-v2', JSON.stringify({ date, variant: v, time: course.time })); } catch {}
         break;
       }
     }
@@ -296,13 +299,37 @@ function respawn() {
 function restartLevel() {
   if (mode === 'level') startLevel(levelIndex);
   else if (mode === 'daily') startDaily();
+  else if (mode === 'custom') startCustom();
   else startFrenzy(level.seed);
+}
+
+// A course from the level editor (editor/), passed through this browser's storage.
+function editorCourse() {
+  try {
+    const e = JSON.parse(localStorage.getItem('wheelie-wahala-editor'));
+    if (!e || !Array.isArray(e.pieces)) return null;
+    return {
+      id: 'custom-editor', world: e.theme, theme: e.theme, name: e.name || 'Custom level', style: e.style,
+      grip: e.theme === 'ice' ? 0.5 : undefined, start: [0, 0], pieces: e.pieces,
+      time: Number(e.time) || 30, flipGoal: Number(e.flipGoal) || 0, hint: 'Test ride from the level editor',
+    };
+  } catch {
+    return null;
+  }
+}
+
+function startCustom() {
+  const course = editorCourse();
+  if (!course) return;
+  loadCourse(course, 'custom');
+  beginRun(`Test ride · ${course.name}`);
 }
 
 function setState(s) {
   state = s;
   document.body.classList.toggle('playing', s === 'playing' || s === 'paused');
   $('menu').hidden = s !== 'menu';
+  $('world').hidden = true;
   $('pause').hidden = s !== 'paused';
   $('finish').hidden = s !== 'finished';
   $('hud').hidden = !(s === 'playing' || s === 'paused');
@@ -385,8 +412,17 @@ function slowMo(seconds) {
 }
 
 // ---------- menu ----------
+function totalStars() {
+  return LEVELS.reduce((sum, l) => sum + starsOf(progress.levels[l.id]), 0);
+}
+
+// Worlds open with stars; inside a world, each level opens when the one before it is finished.
+const worldOf = (l) => WORLDS.find((w) => w.id === (l.world ?? 'desert'));
+const worldUnlocked = (w) => totalStars() >= w.stars;
 function unlocked(i) {
-  return i === 0 || !!progress.levels[LEVELS[i - 1].id]?.goals.finish;
+  const l = LEVELS[i], prev = LEVELS[i - 1];
+  if (!worldUnlocked(worldOf(l))) return false;
+  return !prev || prev.world !== l.world || !!progress.levels[prev.id]?.goals.finish;
 }
 
 // The streak still counts if you played yesterday (play today to keep it going).
@@ -400,25 +436,7 @@ function renderMenu() {
   saveProgress();
   renderCoins();
   renderMenuBadges();
-  const box = $('levels');
-  box.replaceChildren(...LEVELS.map((l, i) => {
-    const best = progress.levels[l.id];
-    const b = document.createElement('button');
-    b.className = 'level' + (unlocked(i) ? '' : ' locked');
-    const n = starsOf(best);
-    const stars = [1, 2, 3].map((k) => `<span class="${n >= k ? 'on' : ''}">★</span>`).join('');
-    b.innerHTML = `<div class="num">${i + 1}</div><div class="name"></div><div class="lstars">${stars}</div><div class="best"></div>`;
-    b.querySelector('.name').textContent = l.name;
-    b.querySelector('.best').textContent = best
-      ? `Best ${fmt(best.time)} · ↻ ${best.flips}`
-      : unlocked(i) ? 'New!' : '🔒 Finish the last one';
-    b.onclick = () => {
-      if (!unlocked(i)) return;
-      sfx.click();
-      startLevel(i);
-    };
-    return b;
-  }));
+  renderWorlds();
 
   const today = todayUTC(), d = progress.daily;
   const doneToday = d.date === today && d.best;
@@ -432,6 +450,77 @@ function renderMenu() {
   const lt = $('menu-lifetime');
   lt.hidden = !progress.flips;
   lt.textContent = `↻ ${num(progress.flips)} lifetime flips`;
+}
+
+function renderWorlds() {
+  const stars = totalStars();
+  $('worlds').replaceChildren(...WORLDS.map((w) => {
+    const levels = LEVELS.filter((l) => (l.world ?? 'desert') === w.id);
+    const got = levels.reduce((s, l) => s + starsOf(progress.levels[l.id]), 0);
+    const open = stars >= w.stars;
+    const b = document.createElement('button');
+    b.className = `worldcard ${w.theme}${open ? '' : ' locked'}`;
+    const name = document.createElement('span');
+    name.className = 'wname';
+    name.textContent = w.name;
+    const sub = document.createElement('span');
+    sub.className = 'wsub';
+    sub.textContent = open ? w.blurb : `🔒 Needs ${w.stars} ★ (you have ${stars})`;
+    const st = document.createElement('span');
+    st.className = 'wstars';
+    st.textContent = `★ ${got}/${levels.length * 3}`;
+    b.append(st, name, sub);
+    b.onclick = () => {
+      if (!open) {
+        popup([[`🔒 ${w.stars - stars} more ★ to open`]], 'small');
+        return;
+      }
+      sfx.click();
+      openWorld(w);
+    };
+    return b;
+  }));
+}
+
+let currentWorld = WORLDS[0];
+function openWorld(w) {
+  currentWorld = w;
+  const first = LEVELS.findIndex((l) => (l.world ?? 'desert') === w.id);
+  if (level?.world !== w.id && LEVELS[levelIndex].world !== w.id) loadLevel(first); // the world as a backdrop
+  renderLevels(w);
+  $('menu').hidden = true;
+  $('world').hidden = false;
+}
+
+function closeWorld() {
+  $('world').hidden = true;
+  $('menu').hidden = false;
+  renderMenu();
+}
+$('btn-world-back').onclick = () => { sfx.click(); closeWorld(); };
+
+function renderLevels(w) {
+  const levels = LEVELS.map((l, i) => [l, i]).filter(([l]) => (l.world ?? 'desert') === w.id);
+  $('world-name').textContent = w.name;
+  const got = levels.reduce((s, [l]) => s + starsOf(progress.levels[l.id]), 0);
+  $('world-stars').textContent = `★ ${got} / ${levels.length * 3}${w.grip ? ' · slippery!' : ''}`;
+  $('levels').replaceChildren(...levels.map(([l, i], k) => {
+    const best = progress.levels[l.id];
+    const b = document.createElement('button');
+    b.className = 'level' + (unlocked(i) ? '' : ' locked');
+    const n = starsOf(best);
+    const stars = [1, 2, 3].map((s) => `<span class="${n >= s ? 'on' : ''}">★</span>`).join('');
+    b.innerHTML = `<div class="num">${k + 1}</div><div class="name"></div><div class="lstars">${stars}</div><div class="best"></div>`;
+    b.querySelector('.name').textContent = l.name;
+    b.querySelector('.best').textContent = best ? `${fmt(best.time)} · ↻ ${best.flips}` : unlocked(i) ? 'New!' : '🔒';
+    b.onclick = () => {
+      if (!unlocked(i)) return;
+      sfx.click();
+      $('world').hidden = true;
+      startLevel(i);
+    };
+    return b;
+  }));
 }
 
 // ---------- tricks, landings, crashes ----------
@@ -571,7 +660,10 @@ function finishRun() {
   } else {
     const got = { finish: true, time: time <= level.time, flips: flips >= level.flipGoal };
     let had = {};
-    if (mode === 'level') {
+    if (mode === 'custom') {
+      banner = 'TEST RIDE DONE!';
+      stars = +got.finish + +got.time + +got.flips;
+    } else if (mode === 'level') {
       const prev = progress.levels[level.id];
       had = prev?.goals ?? {};
       progress.levels[level.id] = {
@@ -620,11 +712,13 @@ function finishRun() {
       notes.push(`${short} flip${short > 1 ? 's' : ''} short of the flip star`);
     }
     note = notes.length ? `So close: ${notes.join(' · ')}` : 'All three goals in one run! 🔥';
-    missions.report('finishes');
-    if (run.crashes === 0) missions.report('cleanRun');
-    // Keep the ghost if this was the fastest run on this course.
-    const old = loadGhost(level.id);
-    if (recorder && (!old || time < old.time)) saveGhost(level.id, time, recorder.samples);
+    if (mode !== 'custom') {
+      missions.report('finishes');
+      if (run.crashes === 0) missions.report('cleanRun');
+      // Keep the ghost if this was the fastest run on this course.
+      const old = loadGhost(level.id);
+      if (recorder && (!old || time < old.time)) saveGhost(level.id, time, recorder.samples);
+    }
   }
 
   addCoins(coins);
@@ -647,13 +741,15 @@ function finishRun() {
   $('res-streak').hidden = !streakText;
   $('res-streak').textContent = streakText;
   renderMissionList($('res-missions'), true);
-  $('btn-next').hidden = mode !== 'level' || levelIndex >= LEVELS.length - 1;
+  $('btn-next').hidden = mode !== 'level' || !nextLevel();
   $('btn-retry').textContent = mode === 'frenzy' ? '↻ Same course' : '↻ Retry';
+  $('btn-menu').textContent = mode === 'custom' ? '✎ Editor' : 'Levels';
 
   const starEls = [...$('stars').children];
   starEls.forEach((s) => s.classList.remove('on'));
   starEls.slice(0, stars).forEach((s, i) => setTimeout(() => { s.classList.add('on'); sfx.star(i); }, 450 + i * 380));
-  submitScore();
+  if (mode !== 'custom') submitScore();
+  else $('res-save').textContent = 'Test rides are not saved.';
 }
 
 async function submitScore() {
@@ -742,7 +838,12 @@ $('btn-menu-p').onclick = () => goMenu();
 $('btn-exit').hidden = !startng.onStartNg();
 $('btn-retry').onclick = () => restartLevel();
 $('btn-menu').onclick = () => goMenu();
-$('btn-next').onclick = () => startLevel(Math.min(levelIndex + 1, LEVELS.length - 1));
+// The next level you can play: the next one along, if it's open.
+function nextLevel() {
+  const i = levelIndex + 1;
+  return i < LEVELS.length && unlocked(i) ? i : null;
+}
+$('btn-next').onclick = () => startLevel(nextLevel() ?? levelIndex);
 
 // ---------- settings ----------
 let settings = loadSettings();
@@ -881,8 +982,14 @@ function pause() {
 }
 
 function goMenu() {
+  if (mode === 'custom') {
+    location.href = 'editor/';
+    return;
+  }
+  const fromLevel = mode === 'level';
   loadLevel(levelIndex);
   setState('menu');
+  if (fromLevel) openWorld(worldOf(level)); // back to the world you were playing
 }
 
 setupInput({
@@ -893,11 +1000,12 @@ setupInput({
     if ((code === 'Escape' || code === 'KeyP')) {
       if (!$('settings').hidden) $('settings').hidden = true;
       else if (!$('missions').hidden) $('missions').hidden = true;
+      else if (!$('world').hidden) closeWorld();
       else if (state === 'playing') pause();
       else if (state === 'paused') setState('playing');
       else if (!$('board').hidden) $('board').hidden = true;
     }
-    if ((code === 'Enter' || code === 'Space') && $('settings').hidden && $('board').hidden && $('missions').hidden) {
+    if ((code === 'Enter' || code === 'Space') && $('settings').hidden && $('board').hidden && $('missions').hidden && $('world').hidden) {
       if (state === 'finished') ($('btn-next').hidden ? $('btn-retry') : $('btn-next')).click();
       else if (state === 'menu') startLevel(levelIndex);
     }
@@ -914,7 +1022,25 @@ function physicsStep(input) {
   for (const e of sim.step(input, STEP)) {
     if (e.type === 'land') onLand(e);
     else if (e.type === 'crash') crash();
+    else if (e.type === 'boost') onBoost();
+    else if (e.type === 'smash') onSmash(e);
   }
+}
+
+function onBoost() {
+  sfx.boost();
+  world.shake(0.15);
+  buzz(20);
+  popup([['BOOST!']], 'small');
+}
+
+// Crates: a few points and a crunch each.
+const SMASH_POINTS = 50;
+function onSmash(e) {
+  tricks.score += SMASH_POINTS;
+  sfx.smash();
+  particles.dust(e.x, e.y, 0.9, '#c8873f');
+  missions.report('crates');
 }
 
 function tick(now) {
@@ -1007,7 +1133,8 @@ function frame(dt) {
   }
 
   particles.update(state === 'paused' ? 0 : gdt);
-  world.animateFlags(clock);
+  world.syncDynamics();
+  world.animate(clock);
   world.render();
   updateOverlays();
 }
@@ -1015,6 +1142,7 @@ function frame(dt) {
 applySettings();
 loadLevel(0);
 setState('menu');
+if (new URLSearchParams(location.search).get('play') === 'editor') startCustom();
 refreshPlayer();
 requestAnimationFrame(tick);
 

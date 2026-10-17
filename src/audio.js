@@ -248,6 +248,8 @@ export const sfx = {
   // Combo: each step of the chain plays a little higher.
   combo: (m) => { const f = 523 * 2 ** (Math.min(12, (m - 1) * 2) / 12); tone(f, 0.12, 0.16, 'square', 0.05); tone(f * 1.5, 0.2, 0.2, 'triangle', 0.07); },
   perfect: limit('perfect', 200, () => { tone(1568, 0, 0.12, 'sine', 0.09); tone(2093, 0.06, 0.3, 'sine', 0.08); }),
+  boost: limit('boost', 300, () => { tone(220, 0, 0.35, 'sawtooth', 0.04); tone(440, 0.05, 0.35, 'triangle', 0.07); noise(0.3, 0.12, 2400); }),
+  smash: limit('smash', 70, () => { noise(0.12, 0.3, 1600); tone(140, 0, 0.1, 'square', 0.05); }),
   milestone: () => [392, 523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.4, 'triangle', 0.09)),
 };
 

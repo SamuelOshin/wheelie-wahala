@@ -28,8 +28,12 @@ milestones at 25, 100, 250, 500 and up.
 
 ## Modes
 
-- **Levels**: three hand-made desert courses, three stars each.
-- **Daily Challenge**: a new course every day (UTC), the same for everyone. It's generated from the
+- **Three worlds, 30 levels**: Desert Canyon, Lagos City (opens at 12 ★: the Third Mainland Bridge,
+  danfos, boost lanes) and Ice Peaks (opens at 30 ★: less grip, so climbs and landings are slippery).
+  Three stars per level.
+- **Track pieces**: kickers, drops, loops, **boost pads** (fire you forward), **see-saws** (tip as you
+  ride over; hit one fast and it throws you) and **crates** to smash for points.
+- **Daily Challenge**: a new course every day (UTC) in one of the three worlds, the same for everyone. It's generated from the
   date and checked by an autopilot before you see it. Finish it on consecutive days to build a 🔥 streak.
 - **Flip Frenzy**: 60 seconds on a long generated course full of kickers. Score as many flip
   points as you can; every trick landed at ×3 combo or higher adds 3 seconds.
@@ -80,7 +84,12 @@ python -m http.server 8765
 Then open http://localhost:8765. Sign-in and scores only work on `wheelie-wahala.start.ng`.
 Locally the game plays with a default rider.
 
-`node tools/gen-check.mjs 40` rides 40 generated Daily and Frenzy courses with the autopilot and lists
+**Level editor**: open `editor/` (or ⚙️ Settings → Level editor). Add pieces, see the course, run
+the autopilot check (it marks crash spots) and test ride it in the game. "Copy as code" gives the
+level as JSON.
+
+`node tools/level-check.mjs` rides all 30 levels with the autopilot and suggests target times and flip
+goals. `node tools/gen-check.mjs 40` rides 40 generated Daily and Frenzy courses with the autopilot and lists
 any it can't finish cleanly.
 
 `node tools/sim.mjs desert-2` rides a level headlessly with a scripted rider (add `--raw` for a rider

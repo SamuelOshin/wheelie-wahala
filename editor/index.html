@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Wheelie Wahala · Level editor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Nunito:wght@600;800&display=swap" rel="stylesheet">
+  <style>
+    :root { --deep: #c8551b; --cream: #fff6e3; --ink: #2a1608; --line: #ecd9b4; --green: #36c25b; --red: #e5383b; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; font-family: 'Nunito', system-ui, sans-serif; color: var(--ink); background: #f6c27a; }
+    body { display: grid; grid-template-columns: 380px 1fr; grid-template-rows: auto 1fr; height: 100vh; }
+    header { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: #292a23; color: #fff; flex-wrap: wrap; }
+    header h1 { margin: 0 12px 0 0; font: 22px 'Lilita One', sans-serif; color: #ffe14d; }
+    button { font: inherit; font-weight: 800; border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer; background: #fff; color: var(--ink); }
+    button.go { background: var(--green); color: #fff; }
+    button.small { padding: 4px 9px; font-size: 13px; }
+    button:disabled { opacity: .5; cursor: default; }
+    #status { margin-left: auto; font-weight: 800; }
+    #status.ok { color: #9cf0b1; } #status.bad { color: #ffb0ab; }
+    aside { overflow-y: auto; background: var(--cream); padding: 12px; border-right: 3px solid var(--line); }
+    fieldset { border: 0; border-top: 2px solid var(--line); margin: 0 0 10px; padding: 8px 0 0; }
+    legend { font: 17px 'Lilita One', sans-serif; color: var(--deep); padding-right: 6px; }
+    label.f { display: grid; grid-template-columns: 90px 1fr; align-items: center; gap: 8px; margin: 5px 0; font-weight: 800; font-size: 14px; }
+    input, select { font: inherit; font-weight: 700; padding: 5px 8px; border-radius: 8px; border: 2px solid var(--line); background: #fff; min-width: 0; }
+    .palette { display: flex; flex-wrap: wrap; gap: 6px; }
+    .palette button { background: #f6e9cf; }
+    ol#pieces { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    #pieces li { display: grid; grid-template-columns: 22px 92px 1fr auto; gap: 6px; align-items: center; padding: 6px; border-radius: 10px; background: #f6e9cf; }
+    #pieces li.sel { outline: 3px solid #f9a826; }
+    #pieces li .n { font-size: 12px; opacity: .6; text-align: right; }
+    #pieces li .params { display: flex; gap: 4px; flex-wrap: wrap; }
+    #pieces li .params input { width: 58px; padding: 3px 5px; }
+    #pieces li .params label { font-size: 11px; display: grid; }
+    #pieces li .acts { display: flex; gap: 2px; }
+    #pieces li .acts button { padding: 2px 7px; background: #fff; }
+    main { position: relative; overflow: hidden; }
+    canvas { display: block; width: 100%; height: 100%; cursor: grab; }
+    .help { position: absolute; left: 12px; bottom: 10px; font-weight: 800; font-size: 13px; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+    textarea { width: 100%; height: 120px; font: 12px ui-monospace, monospace; border-radius: 8px; border: 2px solid var(--line); padding: 6px; }
+    @media (max-width: 800px) { body { grid-template-columns: 1fr; grid-template-rows: auto 50vh 1fr; } aside { grid-row: 3; } main { grid-row: 2; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Level editor</h1>
+    <button id="test" class="go">▶ Test ride</button>
+    <button id="check">🤖 Autopilot check</button>
+    <button id="export">⧉ Copy as code</button>
+    <button id="new">New</button>
+    <a href="../" style="color:#fff;font-weight:800">Back to the game</a>
+    <span id="status"></span>
+  </header>
+
+  <aside>
+    <fieldset>
+      <legend>Level</legend>
+      <label class="f">Name <input id="name"></label>
+      <label class="f">World
+        <select id="theme"><option value="desert">Desert Canyon</option><option value="lagos">Lagos City</option><option value="ice">Ice Peaks</option></select>
+      </label>
+      <label class="f">Track style
+        <select id="style"><option>ground</option><option>line</option><option>wood</option><option>road</option><option>snow</option><option>ice</option></select>
+      </label>
+      <label class="f">Target time <input id="time" type="number" min="5" step="1"></label>
+      <label class="f">Flip goal <input id="flipGoal" type="number" min="0" step="1"></label>
+    </fieldset>
+
+    <fieldset>
+      <legend>Add a piece</legend>
+      <div class="palette" id="palette"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Pieces</legend>
+      <ol id="pieces"></ol>
+    </fieldset>
+
+    <fieldset>
+      <legend>Paste a level (JSON)</legend>
+      <textarea id="paste" placeholder='{"name":"My level","pieces":[["flat",20],["ramp",12,4]]}'></textarea>
+      <button id="load" class="small">Load it</button>
+    </fieldset>
+  </aside>
+
+  <main>
+    <canvas id="view"></canvas>
+    <div class="help">Drag to pan · scroll to zoom · click a piece in the list to find it</div>
+  </main>
+
+  <script type="module" src="./editor.js"></script>
+</body>
+</html>

@@ -32,9 +32,12 @@ export const TUNING = {
   torso: [-0.18, 0.6, 0.2],
   windowBack: 6, // the bike only touches track within this distance of its progress
   windowAhead: 10,
+  boostAccel: 32, // m/s² while on a boost pad
+  boostTopSpeed: 34,
+  seesawRise: 1.6, // how far the high end of a see-saw sits above the track
 };
 
-const CAT_TRACK = 0x1, CAT_WHEEL = 0x2, CAT_BODY = 0x4;
+const CAT_TRACK = 0x1, CAT_WHEEL = 0x2, CAT_BODY = 0x4, CAT_CRATE = 0x8;
 
 export class BikeSim {
   constructor(track, tuning = TUNING) {
@@ -42,22 +45,62 @@ export class BikeSim {
     this.t = tuning;
     this.world = new planck.World({ gravity: Vec2(0, tuning.gravity) });
     this.progress = 0; // distance along the course (s) the bike is at
+    this.dynamics = []; // see-saw planks and crates, for drawing: { kind, body, hw, hh }
     this.buildTrack();
+    this.buildPieces();
     this.buildBike();
     this.world.on('pre-solve', (contact) => this.preSolve(contact));
   }
 
   buildTrack() {
-    const ground = this.world.createBody();
+    const ground = (this.ground = this.world.createBody());
     this.track.chains.forEach((chain, ci) => {
       const verts = chain.points.map((p) => Vec2(p.x, p.y));
       const f = ground.createFixture(planck.Chain(verts, false), {
-        friction: this.t.trackFriction,
+        friction: this.track.friction ?? this.t.trackFriction, // ice levels are slippery
         filterCategoryBits: CAT_TRACK,
-        filterMaskBits: CAT_WHEEL,
+        filterMaskBits: CAT_WHEEL | CAT_CRATE,
       });
       f.setUserData({ chain: ci });
     });
+  }
+
+  // See-saws and crates: real bodies the bike pushes around.
+  buildPieces() {
+    const ground = this.ground;
+    for (const sw of this.track.seesaws) {
+      const half = sw.len / 2, thick = 0.18;
+      const tilt = Math.atan2(this.t.seesawRise, sw.len); // the near end starts down, at track height
+      const pivot = Vec2(sw.x0 + half, sw.y + half * Math.sin(tilt) - thick);
+      const plank = this.world.createDynamicBody({ position: pivot, angle: tilt, angularDamping: 1.5, allowSleep: false });
+      plank.createFixture(planck.Box(half, thick), {
+        density: 1.5, friction: this.track.friction ?? this.t.trackFriction,
+        filterCategoryBits: CAT_TRACK, filterMaskBits: CAT_WHEEL | CAT_CRATE,
+      }).setUserData({ kind: 'plank' });
+      // Joint limits are relative to the starting tilt: it can swing down to -tilt and no further up.
+      this.world.createJoint(planck.RevoluteJoint({ enableLimit: true, lowerAngle: -2 * tilt, upperAngle: 0 }, ground, plank, pivot));
+      this.dynamics.push({ kind: 'plank', body: plank, hw: half, hh: thick, home: { x: pivot.x, y: pivot.y, angle: tilt } });
+    }
+    for (const stack of this.track.crates) {
+      // A little pyramid: rows of 3, 2, 1… until n crates are placed.
+      const size = 0.42;
+      let left = stack.n, row = 0;
+      while (left > 0) {
+        const inRow = Math.min(left, Math.max(1, Math.ceil(stack.n / 2) - row));
+        for (let i = 0; i < inRow; i++) {
+          const x = stack.x + (i - (inRow - 1) / 2) * size * 2.05;
+          const y = stack.y + size + row * size * 2.02;
+          const crate = this.world.createDynamicBody({ position: Vec2(x, y), allowSleep: true });
+          crate.createFixture(planck.Box(size, size), {
+            density: 0.12, friction: 0.2, restitution: 0.2,
+            filterCategoryBits: CAT_CRATE, filterMaskBits: CAT_TRACK | CAT_WHEEL | CAT_CRATE,
+          }).setUserData({ kind: 'crate' });
+          this.dynamics.push({ kind: 'crate', body: crate, hw: size, hh: size, home: { x, y, angle: 0 }, smashed: false });
+        }
+        left -= inRow;
+        row++;
+      }
+    }
   }
 
   buildBike() {
@@ -76,7 +119,7 @@ export class BikeSim {
         density: t.wheelDensity,
         friction: t.wheelFriction,
         filterCategoryBits: CAT_WHEEL,
-        filterMaskBits: CAT_TRACK,
+        filterMaskBits: CAT_TRACK | CAT_CRATE,
       });
       w.setUserData({ wheel: true });
       return w;
@@ -103,6 +146,16 @@ export class BikeSim {
       b.setAngularVelocity(0);
       b.setAwake(true);
     };
+    // See-saws and crates ahead of the spawn go back to how they started.
+    for (const d of this.dynamics) {
+      if (d.home.x < spawn.x - 1) continue;
+      d.body.setTransform(Vec2(d.home.x, d.home.y), d.home.angle);
+      d.body.setLinearVelocity(Vec2(0, 0));
+      d.body.setAngularVelocity(0);
+      d.body.setActive(true);
+      d.body.setAwake(true);
+      d.smashed = false;
+    }
     place(this.chassis, 0, 0, spawn.angle);
     place(this.rear, ...t.rearWheel, 0);
     place(this.front, ...t.frontWheel, 0);
@@ -125,6 +178,8 @@ export class BikeSim {
   // and stops the far side of a loop from catching the bike on the way in.
   preSolve(contact) {
     const a = contact.getFixtureA(), b = contact.getFixtureB();
+    // Only the bike's wheels are limited to nearby track; crates rest on track anywhere.
+    if (a.getFilterCategoryBits() !== CAT_WHEEL && b.getFilterCategoryBits() !== CAT_WHEEL) return;
     const seg = this.segmentOf(a, contact.getChildIndexA()) ?? this.segmentOf(b, contact.getChildIndexB());
     if (!seg) return;
     if (seg.s1 < this.progress - this.t.windowBack || seg.s0 > this.progress + this.t.windowAhead) {
@@ -140,8 +195,15 @@ export class BikeSim {
     for (let ce = wheel.getContactList(); ce; ce = ce.next) {
       const c = ce.contact;
       if (!c.isTouching() || !c.isEnabled()) continue;
-      const seg = this.segmentOf(c.getFixtureA(), c.getChildIndexA()) ?? this.segmentOf(c.getFixtureB(), c.getChildIndexB());
-      if (!seg) continue;
+      let seg = this.segmentOf(c.getFixtureA(), c.getChildIndexA()) ?? this.segmentOf(c.getFixtureB(), c.getChildIndexB());
+      if (!seg) {
+        // On a plank or a crate: ground for flips and landings, sloped like the body.
+        const other = c.getFixtureA().getBody() === wheel ? c.getFixtureB() : c.getFixtureA();
+        if (!other.getUserData()?.kind) continue;
+        const ang = other.getBody().getAngle();
+        const dx = Math.cos(ang), dy = Math.sin(ang);
+        seg = { ax: p.x - dx, ay: p.y - dy, bx: p.x + dx, by: p.y + dy, nx: -dy, ny: dx, len: 2, s0: this.progress - 1 };
+      }
       const u = ((p.x - seg.ax) * (seg.bx - seg.ax) + (p.y - seg.ay) * (seg.by - seg.ay)) / (seg.len * seg.len);
       const s = seg.s0 + seg.len * Math.max(0, Math.min(1, u));
       if (best === null || Math.abs(s - this.progress) < Math.abs(best - this.progress)) {
@@ -253,6 +315,37 @@ export class BikeSim {
       }
       this.airTime = 0;
       this.airSpin = 0;
+    }
+
+    // Boost pads push the bike along while a wheel is on them.
+    const cpos = this.chassis.getPosition();
+    const pad = (this.rearGround || this.frontGround) && !this.crashed
+      ? this.track.boosts.find((b) => cpos.x >= b.x0 - 0.5 && cpos.x <= b.x1 && Math.abs(cpos.y - b.y - 0.8) < 1.6)
+      : null;
+    if (pad) {
+      const v = this.chassis.getLinearVelocity();
+      if (v.x < t.boostTopSpeed) {
+        const m = this.chassis.getMass() + this.rear.getMass() + this.front.getMass();
+        this.chassis.applyForceToCenter(Vec2(t.boostAccel * m, 0), true);
+      }
+      if (this.onPad !== pad) events.push({ type: 'boost' });
+    }
+    this.onPad = pad;
+
+    // A crate that's hit hard or knocked away smashes: it bursts and is gone a moment
+    // later, so the pieces never litter the track ahead.
+    for (const d of this.dynamics) {
+      if (d.kind !== 'crate') continue;
+      if (d.smashed) {
+        if (d.body.isActive() && (d.gone -= dt) <= 0) d.body.setActive(false);
+        continue;
+      }
+      const q = d.body.getPosition();
+      if (d.body.getLinearVelocity().length() > 3 || Math.hypot(q.x - d.home.x, q.y - d.home.y) > 1) {
+        d.smashed = true;
+        d.gone = 0.25;
+        if (!this.coasting) events.push({ type: 'smash', x: q.x, y: q.y });
+      }
     }
 
     if (this.coasting) return [];

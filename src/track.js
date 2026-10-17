@@ -13,8 +13,12 @@
 //   ['gap', dx, dy, style?]    lift the pen and start a new chain (a jump)
 //   ['style', name]            change style of the following chains
 //   ['checkpoint']             respawn point just after the pen (put it on a flat)
+//   ['boost', dx]              flat boost pad that pushes the bike forward
+//   ['seesaw', len]            a plank on a pivot across a gap: ride up, it tips you down
+//   ['crates', n]              a stack of n crates on the track ahead to smash through
 //
-// Styles: 'ground' (filled earth), 'line' (thin red line), 'wood' / 'ice' (thick bands).
+// Styles: 'ground' (filled earth), 'line' (thin red line), 'wood' / 'ice' (thick bands),
+// 'road' (Lagos asphalt), 'snow' (snowy earth).
 
 const STEP = 0.4; // metres between sampled points
 const RUN_IN = 40, RUN_OUT = 100;
@@ -29,6 +33,7 @@ export function buildTrack(level) {
   let style = level.style ?? 'ground';
   let cur;
   const checkpoints = [];
+  const boosts = [], seesaws = [], crates = [];
 
   const newChain = () => {
     cur = { style, points: [{ x, y }] };
@@ -87,6 +92,19 @@ export function buildTrack(level) {
       case 'checkpoint':
         checkpoints.push(x + 2);
         break;
+      case 'boost':
+        boosts.push({ x0: x, x1: x + a, y });
+        to(x + a, y);
+        break;
+      case 'seesaw':
+        // The track stops; the plank bridges the gap; the track carries on at the same height.
+        seesaws.push({ x0: x, y, len: a });
+        x += a;
+        newChain();
+        break;
+      case 'crates':
+        crates.push({ x: x + 4, y, n: a || 3 });
+        break;
       default:
         throw new Error(`Unknown track piece ${kind}`);
     }
@@ -125,7 +143,7 @@ export function buildTrack(level) {
   for (const ch of chains) for (const p of ch.points) minY = Math.min(minY, p.y);
   // Falling this far below the lowest track means the bike has left the course.
   const killY = minY - 40;
-  const track = { chains, segments, length: s, finishX, end, minY, killY };
+  const track = { chains, segments, length: s, finishX, end, minY, killY, boosts, seesaws, crates, friction: level.grip };
   track.checkpoints = [startX + 3, ...checkpoints].map((cx) => spawnAtX(track, cx));
   return track;
 }
