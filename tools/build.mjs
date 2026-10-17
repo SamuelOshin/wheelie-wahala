@@ -46,7 +46,8 @@ if (next === html && !html.includes(entry)) throw new Error('index.html is missi
 writeFileSync('index.html', next);
 
 // The service worker keeps these for offline play. Its version changes with the build.
-const shell = ['./', 'index.html', 'style.css', 'cover.png', 'startng.json', ...js.map((p) => p)];
+const shell = ['./', 'index.html', 'style.css', 'cover.png', 'startng.json', 'manifest.json',
+  'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon-180.png', ...js.map((p) => p)];
 const version = createHash('sha256').update(js.join('|') + readFileSync('style.css', 'utf8') + next).digest('hex').slice(0, 10);
 const sw = readFileSync('tools/sw.template.js', 'utf8')
   .replace('__VERSION__', version)

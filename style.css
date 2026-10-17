@@ -341,3 +341,36 @@ body.big-buttons #touch button.brake { font-size: 20px; }
 #tags .tag.friend { background: rgba(229,56,59,.9); }
 .race-results { margin: 0; padding: 0 0 0 22px; font-weight: 800; width: 100%; }
 .race-results li.me { color: var(--deep); }
+
+/* Full screen button and the top-right corner */
+.corner { position: fixed; top: max(14px, env(safe-area-inset-top)); right: max(14px, env(safe-area-inset-right)); display: flex; gap: 8px; align-items: center; z-index: 6; }
+.corner .coins { position: static; }
+.fs-btn { width: 40px; height: 40px; border: 0; border-radius: 50%; background: #292a23; color: #ffe14d; font: 22px/1 var(--display); box-shadow: 0 4px 0 rgba(0,0,0,.2); }
+body.playing .corner .fs-btn { display: none; }
+.tip-steps { margin: 0; padding-left: 22px; display: grid; gap: 8px; font-weight: 700; max-width: 380px; }
+.share-glyph { display: inline-block; padding: 0 6px; border-radius: 6px; background: #e8f0ff; color: #1f6feb; }
+
+/* Size everything to the part of the screen you can actually see (browser bars come and go). */
+.screen { height: 100vh; height: 100dvh; inset: auto 0 auto 0; top: 0; }
+
+/* Results: two columns that stack on tall screens and sit side by side on short ones. */
+.res-cols { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.res-col { display: flex; flex-direction: column; align-items: center; gap: 10px; min-width: 0; }
+@media (max-height: 520px) and (orientation: landscape) {
+  #finish { justify-content: flex-start; padding: max(6px, env(safe-area-inset-top)) 12px 8px; gap: 4px; }
+  #finish .banner { font-size: 28px; -webkit-text-stroke-width: 2px; text-shadow: 0 3px 0 var(--deep); }
+  #finish .panel.card { width: min(900px, 100%); max-height: calc(100dvh - 50px); padding: 10px 14px; overflow: hidden; }
+  .res-cols { flex-direction: row; align-items: stretch; height: 100%; min-height: 0; }
+  .res-col { flex: 1; gap: 6px; overflow-y: auto; }
+  #finish #stars { font-size: 30px; }
+  #finish .goals { gap: 4px; }
+  #finish .goals li { padding: 4px 10px; }
+  #finish .goals li .val { font-size: 15px; }
+  #finish .result { gap: 14px; }
+  #finish .result b { font-size: 19px; }
+  #finish .lifetime, #finish #res-note { font-size: 13px; }
+  #finish .menu-row { gap: 6px; }
+  #finish .menu-row .pill { padding: 7px 11px; font-size: 14px; }
+  #finish .menu-row .big { padding: 7px 16px; font-size: 17px; }
+  #finish .res-extra { font-size: 17px; }
+}

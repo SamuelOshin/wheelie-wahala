@@ -16,6 +16,7 @@ export const DEFAULTS = {
   reduceMotion: typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches,
   leftHanded: false, // swap the touch buttons: brake/GO on the left
   bigButtons: false,
+  autoFullscreen: true, // go full screen when a ride starts on a phone
 };
 
 export function loadSettings() {
@@ -52,6 +53,7 @@ export function sanitize(s) {
     reduceMotion: !!s.reduceMotion,
     leftHanded: !!s.leftHanded,
     bigButtons: !!s.bigButtons,
+    autoFullscreen: s.autoFullscreen !== false,
   };
 }
 

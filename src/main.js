@@ -17,9 +17,20 @@ import { loadSettings, saveSettings, sanitize, cleanName } from './settings.js';
 import * as THREE from '../vendor/three.module.js';
 import * as startng from './startng.js';
 import { encodeRace, decodeRace, drawCard, shareCard } from './share.js';
+import { canFullscreen, isFullscreen, isIOS, isStandalone, enterFullscreen, toggleFullscreen, onFullscreenChange } from './screen.js';
 import { LiveRoom, IDLE_SLOT } from './live.js';
 
 const $ = (id) => document.getElementById(id);
+
+// After signing in, start.ng sends players back with #startng_session=… in the address. This game
+// talks to start.ng through its connect page instead, so the token isn't needed: take it out of the
+// address bar straight away, so it's never on screen or copied into a shared link.
+function stripSessionFromAddress() {
+  if (!/startng_session=/.test(location.hash)) return;
+  const rest = location.hash.slice(1).split('&').filter((kv) => !/^(startng_session|expires_in)=/.test(kv)).join('&');
+  history.replaceState(null, '', location.pathname + location.search + (rest ? `#${rest}` : ''));
+}
+stripSessionFromAddress();
 const STEP = 1 / 120;
 const MILESTONES = [25, 100, 250, 500, 1000, 2500, 5000, 10000];
 const FRENZY_TIME = 60; // seconds
@@ -247,6 +258,8 @@ function loadLevel(i) {
 
 function beginRun(name) {
   unlockAudio();
+  if (settings.autoFullscreen && isTouch()) enterFullscreen().then(renderFullscreen);
+  maybeShowIOSTip();
   setState('playing');
   $('hud-level').textContent = name;
   showHint(level.hint, 5);
@@ -1188,6 +1201,50 @@ $('btn-invite-join').onclick = () => {
 $('btn-invite-no').onclick = () => { invite = null; $('invite').hidden = true; };
 $('btn-lobby-leave').onclick = () => { race = null; $('lobby').hidden = true; setState('menu'); };
 
+// ---------- full screen ----------
+// Phones: a ⛶ button in the corner and on the pause screen, and (by default) full screen as a
+// ride starts. iPhones can't do it for web pages, so the button explains Add to Home Screen.
+function renderFullscreen() {
+  const iosTip = isIOS() && !isStandalone() && !canFullscreen();
+  const show = canFullscreen() || iosTip;
+  $('btn-fullscreen').hidden = !show;
+  $('btn-fullscreen-p').hidden = !show;
+  const on = isFullscreen();
+  $('btn-fullscreen').textContent = on ? '⤓' : '⛶';
+  $('btn-fullscreen').title = on ? 'Leave full screen' : 'Full screen';
+  $('btn-fullscreen-p').textContent = on ? '⤓ Leave full screen' : '⛶ Full screen';
+}
+
+function fullscreenButton() {
+  sfx.click();
+  if (!canFullscreen()) {
+    $('iostip').hidden = false;
+    return;
+  }
+  toggleFullscreen().then(renderFullscreen);
+}
+$('btn-fullscreen').onclick = fullscreenButton;
+$('btn-fullscreen-p').onclick = fullscreenButton;
+$('btn-iostip-ok').onclick = () => { sfx.click(); $('iostip').hidden = true; };
+onFullscreenChange(() => {
+  renderFullscreen();
+  world.resize();
+});
+
+// iPhone players see the Add to Home Screen tip once, on their first ride.
+function maybeShowIOSTip() {
+  if (!isIOS() || isStandalone() || canFullscreen() || !isTouch()) return;
+  try {
+    if (localStorage.getItem('wheelie-wahala-iostip')) return;
+    localStorage.setItem('wheelie-wahala-iostip', '1');
+  } catch {}
+  setTimeout(() => {
+    if (state !== 'playing') return;
+    setState('paused');
+    $('iostip').hidden = false;
+  }, 600);
+}
+
 // ---------- automatic quality ----------
 // "Auto" starts at High on computers and Medium on phones, then steps down while riding
 // if the frame rate stays low. The level it settles on is remembered for next time.
@@ -1251,7 +1308,7 @@ function openSettings() {
   $('set-name').placeholder = startngConnected ? player.name : 'Rider';
   $('set-nametag').checked = settings.nameTag;
   $('set-ghost').checked = settings.ghost;
-  for (const k of ['reduceMotion', 'leftHanded', 'bigButtons']) $(`set-${k}`).checked = settings[k];
+  for (const k of ['reduceMotion', 'leftHanded', 'bigButtons', 'autoFullscreen']) $(`set-${k}`).checked = settings[k];
   for (const k of ['master', 'music', 'sfx', 'engine']) {
     const input = $(`set-${k}`);
     input.value = settings[k];
@@ -1276,7 +1333,7 @@ $('set-name').addEventListener('input', (e) => updateSetting('riderName', e.targ
 $('set-name').addEventListener('change', (e) => { e.target.value = cleanName(e.target.value); });
 $('set-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
 $('set-nametag').addEventListener('change', (e) => updateSetting('nameTag', e.target.checked));
-for (const k of ['reduceMotion', 'leftHanded', 'bigButtons']) {
+for (const k of ['reduceMotion', 'leftHanded', 'bigButtons', 'autoFullscreen']) {
   $(`set-${k}`).addEventListener('change', (e) => updateSetting(k, e.target.checked));
 }
 $('set-ghost').addEventListener('change', (e) => {
@@ -1396,7 +1453,8 @@ setupInput({
     if (code === 'KeyR' && state === 'playing') respawn();
     if (code === 'KeyT' && (state === 'playing' || state === 'paused' || state === 'finished')) restartLevel();
     if ((code === 'Escape' || code === 'KeyP')) {
-      if (!$('settings').hidden) $('settings').hidden = true;
+      if (!$('iostip').hidden) $('iostip').hidden = true;
+      else if (!$('settings').hidden) $('settings').hidden = true;
       else if (!$('missions').hidden) $('missions').hidden = true;
       else if (!$('world').hidden) closeWorld();
       else if (!$('garage').hidden) closeGarage();
@@ -1574,6 +1632,12 @@ loadLevel(0);
 setState('menu');
 readRaceLink();
 live.connect();
+// A link opened while the game is already open in this tab only changes the part after #.
+addEventListener('hashchange', () => {
+  stripSessionFromAddress();
+  readRaceLink();
+});
+renderFullscreen();
 if (new URLSearchParams(location.search).get('play') === 'editor') startCustom();
 refreshPlayer();
 requestAnimationFrame(tick);

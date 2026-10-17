@@ -64,6 +64,11 @@ milestones at 25, 100, 250, 500 and up.
 - **Fast loading**: the bundled build above, and the Garage and the Daily/Frenzy course tools load
   only when first used.
 - **Plays offline** after the first visit (service worker). Updates arrive on the next reload.
+- **Full screen on phones**: the ⛶ button (menu corner, pause screen), and by default the game goes
+  full screen and locks to landscape when a ride starts (Settings → "Full screen when you ride").
+  iPhones don't allow full screen for web pages, so iPhone players get a one-time tip to
+  **Add to Home Screen**. `manifest.json` then opens the game as an app with no browser bars (Android
+  can install it too). On short landscape screens the results card switches to two columns.
 - **Auto quality** (default): High on computers, Medium on phones, and it steps down if the frame
   rate stays under 40.
 - **Controllers**: A / right trigger ride, B / left trigger brake, stick or D-pad lean, Start pause,
