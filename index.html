@@ -86,6 +86,7 @@
     </div>
     <div id="worlds" class="worlds"></div>
     <div class="menu-row">
+      <button id="btn-race" class="pill race" hidden>🏁 Live race</button>
       <button id="btn-garage" class="pill">🏍️ Garage</button>
       <button id="btn-missions" class="pill">🎯 Missions <span class="badge" id="missions-badge" hidden></span></button>
       <button id="btn-board" class="pill">🏆 Leaderboard</button>
@@ -94,6 +95,7 @@
       <a id="btn-exit" class="pill" href="https://start.ng/">✕ Exit to start.ng</a>
     </div>
     <p class="lifetime-menu" id="menu-lifetime" hidden></p>
+    <p class="live-count" id="live-count" hidden></p>
     <p class="controls-help" id="controls-help">↑ ride · ↓ brake · ← → lean · R checkpoint · T restart · Esc pause</p>
   </section>
 
@@ -139,7 +141,9 @@
       <ul class="mission-list compact" id="res-missions"></ul>
       <p id="res-note"></p>
       <p id="res-save"></p>
+      <ol class="race-results" id="res-race" hidden></ol>
       <div class="menu-row">
+        <button id="btn-share" class="pill">📤 Share</button>
         <button id="btn-retry" class="pill">↻ Retry</button>
         <button id="btn-menu" class="pill">Levels</button>
         <button id="btn-next" class="big">Next ▶</button>
@@ -177,6 +181,43 @@
       </div>
     </div>
   </section>
+
+  <!-- A friend's race link -->
+  <section id="challenge" class="screen dim" hidden>
+    <div class="panel">
+      <h2>Race challenge!</h2>
+      <p id="ch-text" class="center-text"></p>
+      <button id="btn-ch-go" class="big">Race their ghost</button>
+      <button id="btn-ch-no" class="pill">Not now</button>
+    </div>
+  </section>
+
+  <!-- Live race: pick a course, then the lobby counts down -->
+  <section id="racepick" class="screen dim" hidden>
+    <div class="panel">
+      <h2>Live race</h2>
+      <p class="center-text">Everyone playing right now gets your invite. The race starts in 12 seconds.</p>
+      <button id="btn-race-level" class="big"></button>
+      <button id="btn-race-daily" class="pill">Today's Daily course</button>
+      <button id="btn-race-cancel" class="pill">Cancel</button>
+    </div>
+  </section>
+  <section id="lobby" class="screen dim" hidden>
+    <div class="panel">
+      <h2>Live race</h2>
+      <p id="lobby-course" class="center-text"></p>
+      <div id="lobby-time" class="lobby-time"></div>
+      <ul id="lobby-riders" class="mission-list compact"></ul>
+      <button id="btn-lobby-leave" class="pill">Leave</button>
+    </div>
+  </section>
+  <div id="invite" class="invite" hidden>
+    <span id="invite-text"></span>
+    <button id="btn-invite-join" class="big">Join</button>
+    <button id="btn-invite-no" class="pill">✕</button>
+  </div>
+  <div id="countdown" hidden></div>
+  <div id="tags"></div>
 
   <!-- Missions -->
   <section id="missions" class="screen dim" hidden>
@@ -280,7 +321,7 @@
   <script type="module">
     // The built game. Add ?src to the address to run the unbundled source instead (for development).
     if (new URLSearchParams(location.search).has('src')) import('./src/main.js');
-    else import('./build/game-5DZSH3MI.js');
+    else import('./build/game-FWBXUXO2.js');
   </script>
   <!-- game:end -->
 </body>

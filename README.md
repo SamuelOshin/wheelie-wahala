@@ -45,6 +45,20 @@ milestones at 25, 100, 250, 500 and up.
   different (grip, spin speed, weight, wheelbase) but are tuned to the same pace:
   `node tools/bike-check.mjs` rides all 30 levels on each bike and compares total times.
 
+## Play with friends
+
+- **Share**: the results screen makes a picture of your finish (course, time, flips, stars) and shares
+  it with the phone's share sheet. On computers it saves the picture and copies a link.
+- **Race my ghost**: the shared link carries your whole run (about 1 KB, after `#` so it never reaches a
+  server). A friend who opens it races a see-through copy of you, in your start.ng look and your bike,
+  and sees who won.
+- **Live riders and races** (signed-in players, through start.ng's live room for this game): other
+  riders on the same course appear as see-through bikes with name tags. **🏁 Live race** sends an invite
+  to everyone online; whoever joins starts together after a 3-2-1, and the results list everyone's time.
+  The room only carries x/z positions within ±60 m, so `src/live.js` packs the course position, height
+  and course into those numbers. Invites and finish times travel as short room chat messages.
+  Test locally with `tools/live-mock.py` and `?live=ws://localhost:8770&as=Name` in two tabs.
+
 ## Reach
 
 - **Fast loading**: the bundled build above, and the Garage and the Daily/Frenzy course tools load

@@ -72,3 +72,9 @@ export async function leaderboard(limit = 10) {
   const reply = await askStartNg({ type: 'startng:leaderboard', limit }, 'startng:leaderboardData', 8000);
   return reply ?? { ok: false, error: 'start.ng did not answer', entries: [] };
 }
+
+// A one-minute ticket for the live room (signed-in players only): { ok, ticket, url } or null.
+export async function liveTicket() {
+  if (!onStartNg()) return null;
+  return askStartNg({ type: 'startng:ticket' }, 'startng:ticketData', 8000);
+}

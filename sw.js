@@ -3,7 +3,7 @@
 //  - the page itself is fetched fresh when online (so updates arrive), from the cache when not
 //  - built files have hashed names, so cached copies never go stale
 //  - start.ng sign-in, scores and the leaderboard always go to the network
-const VERSION = 'ebc4d6a239';
+const VERSION = 'f6bcd1d103';
 const CACHE = `wheelie-wahala-${VERSION}`;
 const FILES = [
   "./",
@@ -11,7 +11,7 @@ const FILES = [
   "style.css",
   "cover.png",
   "startng.json",
-  "build/game-5DZSH3MI.js",
+  "build/game-FWBXUXO2.js",
   "build/chunk-W6LMEICH.js",
   "build/chunk-7UZAMNOS.js",
   "build/chunk-B5474AYL.js",

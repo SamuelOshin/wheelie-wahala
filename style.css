@@ -326,3 +326,18 @@ body.big-buttons #touch button { width: 106px; height: 106px; font-size: 34px; }
 body.big-buttons #touch button.go { width: 120px; height: 120px; }
 body.big-buttons #touch button.brake { font-size: 20px; }
 :focus-visible { outline: 3px solid #3a86ff; outline-offset: 2px; }
+
+/* Sharing, challenges and live races */
+.center-text { margin: 0; text-align: center; font-weight: 800; max-width: 420px; }
+.live-count { margin: 0; font: 16px var(--display); color: #fff; text-shadow: 0 2px 0 var(--deep); }
+.pill.race { background: #36c25b; color: #fff; box-shadow: 0 4px 0 #1f7a37; }
+.lobby-time { font: 64px/1 var(--display); color: var(--deep); }
+.invite { position: fixed; left: 50%; bottom: max(18px, env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 20; display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 18px; border-radius: 999px; background: #292a23; color: #fff; font-weight: 800; box-shadow: 0 6px 0 rgba(0,0,0,.25); max-width: calc(100vw - 32px); }
+.invite .big { padding: 8px 20px; font-size: 18px; }
+.invite .pill { padding: 6px 12px; }
+#countdown { position: fixed; inset: 0; display: grid; place-items: center; pointer-events: none; font: 160px var(--display); color: #fff; -webkit-text-stroke: 5px var(--deep); paint-order: stroke fill; text-shadow: 0 10px 0 var(--deep); z-index: 8; }
+#tags { position: fixed; inset: 0; pointer-events: none; }
+#tags .tag { position: absolute; left: 0; top: 0; padding: 2px 9px; border-radius: 999px; background: rgba(58,134,255,.85); color: #fff; font: 13px var(--display); white-space: nowrap; will-change: transform; }
+#tags .tag.friend { background: rgba(229,56,59,.9); }
+.race-results { margin: 0; padding: 0 0 0 22px; font-weight: 800; width: 100%; }
+.race-results li.me { color: var(--deep); }

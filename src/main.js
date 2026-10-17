@@ -16,6 +16,8 @@ import { unlockAudio, setEngine, sfx, toggleMute, isMuted, setMusicLevel, setVol
 import { loadSettings, saveSettings, sanitize, cleanName } from './settings.js';
 import * as THREE from '../vendor/three.module.js';
 import * as startng from './startng.js';
+import { encodeRace, decodeRace, drawCard, shareCard } from './share.js';
+import { LiveRoom, IDLE_SLOT } from './live.js';
 
 const $ = (id) => document.getElementById(id);
 const STEP = 1 / 120;
@@ -191,6 +193,13 @@ const ghostBike = new BikeModel(player.style, { ghost: true, look: look() });
 ghostBike.root.position.z = -0.8; // a lane behind you, so it still shows when you're level
 world.scene.add(bike.root, ghostBike.root);
 const particles = new Particles(world.scene);
+// A friend's ghost from a race link: their character and bike, two lanes back.
+const friendBike = new BikeModel(DEFAULT_STYLE, { ghost: true, look: { bike: 'dirt', paint: 'blue' } });
+friendBike.root.position.z = -1.6;
+world.scene.add(friendBike.root);
+let challenge = null; // the race link you opened: { courseId, name, time, style, look, daily, ghost }
+let friend = null; // the challenge, while you're on its course
+let lastRun = null; // the finished run, for the Share button
 
 let state = 'menu'; // menu | playing | paused | finished
 let mode = 'level'; // level | daily | frenzy | custom (a test ride from the level editor)
@@ -209,7 +218,7 @@ function loadCourse(course, courseMode) {
   sim = new BikeSim(track, tuningFor(progress.garage.bike)); // your bike's feel
   world.buildLevel(level, track);
   world.attachDynamics(sim);
-  world.scene.add(bike.root, ghostBike.root);
+  world.scene.add(bike.root, ghostBike.root, friendBike.root);
   particles.attach(world.scene);
   sim.reset(track.checkpoints[0]);
   bike.resetRider();
@@ -220,7 +229,13 @@ function loadCourse(course, courseMode) {
   };
   ghost = (mode === 'level' || mode === 'daily') && settings.ghost ? loadGhost(level.id) : null;
   ghostBike.root.visible = false;
-  recorder = mode === 'level' || mode === 'daily' ? new GhostRecorder() : null;
+  friend = challenge && challenge.courseId === level.id ? challenge : null;
+  if (friend) {
+    friendBike.setStyle(friend.style ?? DEFAULT_STYLE);
+    friendBike.setLook(friend.look ?? { bike: 'dirt', paint: 'blue' });
+  }
+  friendBike.root.visible = false;
+  recorder = mode === 'level' || mode === 'daily' || friend ? new GhostRecorder() : null;
   slowmo = 0;
   world.camState = null;
 }
@@ -251,30 +266,36 @@ function startLevel(i) {
 const courseTools = () => Promise.all([import('./generator.js'), import('./autopilot.js')]);
 
 let dailyCache = null;
-async function dailyCourse() {
-  const date = todayUTC();
+// known: { variant, time } when a race link says exactly which course it was.
+async function dailyCourse(date = todayUTC(), known = null) {
   if (dailyCache?.date === date) return dailyCache.course;
   const [{ generateCourse }, { rideCourse }] = await courseTools();
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('wheelie-wahala-daily-v2')); } catch {}
+  if (known && Number.isInteger(known.variant)) saved = { date, ...known };
   let course;
   if (saved?.date === date) {
     course = generateCourse(`${date}#${saved.variant}`, { mode: 'daily' });
     course.time = saved.time;
+    course.variant = saved.variant;
   } else {
     for (let v = 0; v < 6; v++) {
       course = generateCourse(`${date}#${v}`, { mode: 'daily' });
       const res = rideCourse(course, { maxTime: 90 });
       if (res.finished || v === 5) {
         course.time = Math.ceil(res.finished ? res.time * 1.12 : course.time);
+        course.variant = v;
         try { localStorage.setItem('wheelie-wahala-daily-v2', JSON.stringify({ date, variant: v, time: course.time })); } catch {}
         break;
       }
     }
   }
   course.id = `daily-${date}`;
-  dailyCache = { date, course };
-  pruneDailyGhosts(course.id);
+  course.date = date;
+  if (date === todayUTC()) {
+    dailyCache = { date, course };
+    pruneDailyGhosts(course.id);
+  }
   return course;
 }
 
@@ -305,6 +326,8 @@ function respawn() {
 }
 
 function restartLevel() {
+  if (run?.race) return goMenu(); // a live race can't be re-run alone
+  if (friend && level.id === friend.courseId) return startChallenge();
   if (mode === 'level') startLevel(levelIndex);
   else if (mode === 'daily') startDaily();
   else if (mode === 'custom') startCustom();
@@ -736,6 +759,21 @@ function finishRun() {
     }
   }
 
+  // Racing a friend's ghost: who won?
+  if (friend && mode !== 'frenzy') {
+    const d = time - friend.time;
+    note = d < 0 ? `🏆 You beat ${friend.name} by ${(-d).toFixed(2)} s!` : `${friend.name} was ${d.toFixed(2)} s faster. Rematch?`;
+    banner = d < 0 ? 'YOU WIN!' : 'SO CLOSE!';
+  }
+  if (run.race) {
+    live.say(`ww:fin:${run.race.id}:${Math.round(time * 1000)}`);
+    banner = 'RACE OVER!';
+  }
+  lastRun = {
+    course: level.name, courseId: level.id, time, flips, score: tricks.score, stars,
+    ghost: recorder && mode !== 'frenzy' ? { time, s: recorder.samples.slice() } : null,
+    daily: level.date ? { variant: level.variant, time: level.time } : undefined,
+  };
   addCoins(coins);
   saveProgress();
   sfx.finish();
@@ -758,13 +796,15 @@ function finishRun() {
   renderMissionList($('res-missions'), true);
   $('btn-next').hidden = mode !== 'level' || !nextLevel();
   $('btn-retry').textContent = mode === 'frenzy' ? '↻ Same course' : '↻ Retry';
-  $('btn-menu').textContent = mode === 'custom' ? '✎ Editor' : 'Levels';
+  $('btn-menu').textContent = level.id === 'custom-editor' ? '✎ Editor' : 'Levels';
+  $('btn-share').hidden = level.id === 'custom-editor';
+  renderRaceResults();
 
   const starEls = [...$('stars').children];
   starEls.forEach((s) => s.classList.remove('on'));
   starEls.slice(0, stars).forEach((s, i) => setTimeout(() => { s.classList.add('on'); sfx.star(i); }, 450 + i * 380));
   if (mode !== 'custom') submitScore();
-  else $('res-save').textContent = 'Test rides are not saved.';
+  else $('res-save').textContent = friend ? 'Race links on past Daily courses are just for fun: not saved.' : 'Test rides are not saved.';
 }
 
 async function submitScore() {
@@ -907,6 +947,246 @@ function closeGarage() {
 }
 $('btn-garage').onclick = openGarage;
 $('btn-garage-back').onclick = () => { sfx.click(); closeGarage(); };
+
+// ---------- sharing ----------
+$('btn-share').onclick = async () => {
+  if (!lastRun) return;
+  sfx.click();
+  world.render(); // a fresh frame to put on the card
+  const card = drawCard(world.renderer.domElement, {
+    course: lastRun.course, time: fmt(lastRun.time), flips: lastRun.flips, score: num(lastRun.score),
+    stars: lastRun.stars, rider: riderName() || player.name, url: location.host,
+  });
+  let url = location.origin + location.pathname;
+  if (lastRun.ghost) {
+    url += `#race=${await encodeRace({
+      courseId: lastRun.courseId, name: riderName() || player.name || 'A friend', time: lastRun.time, ghost: lastRun.ghost,
+      style: player.style, look: look(), daily: lastRun.daily,
+    })}`;
+  }
+  const text = `I finished ${lastRun.course} in ${fmt(lastRun.time)} with ${lastRun.flips} flips on Wheelie Wahala! ${lastRun.ghost ? 'Race my ghost:' : 'Play:'}`;
+  const res = await shareCard(card, { text, url, filename: 'wheelie-wahala.png' });
+  if (res === 'downloaded+copied') popup([['Picture saved'], ['race link copied: paste it to a friend', 'pts']], 'small');
+  else if (res === 'downloaded') popup([['Picture saved']], 'small');
+};
+
+// ---------- race links ----------
+const courseName = (id) => (id.startsWith('daily-') ? `the Daily (${id.slice(6)})` : LEVELS.find((l) => l.id === id)?.name ?? 'a course');
+
+async function readRaceLink() {
+  const m = location.hash.match(/^#race=(.+)$/);
+  if (!m) return;
+  history.replaceState(null, '', location.pathname + location.search); // so a reload doesn't reopen it
+  const c = await decodeRace(m[1]);
+  if (!c) return popup([['That race link is broken']], 'small');
+  if (!c.courseId.startsWith('daily-') && !LEVELS.some((l) => l.id === c.courseId)) return popup([['That course isn\'t in this version']], 'small');
+  challenge = c;
+  $('ch-text').textContent = `${c.name} finished ${courseName(c.courseId)} in ${fmt(c.time)}. Can you beat their ghost?`;
+  $('challenge').hidden = false;
+}
+
+// Challenges open any course, even one you haven't unlocked yet.
+async function startChallenge() {
+  $('challenge').hidden = true;
+  const c = challenge;
+  if (!c) return;
+  if (c.courseId.startsWith('daily-')) {
+    const date = c.courseId.slice(6);
+    loadCourse(await dailyCourse(date, c.daily), date === todayUTC() ? 'daily' : 'custom');
+  } else {
+    loadLevel(LEVELS.findIndex((l) => l.id === c.courseId));
+  }
+  beginRun(`Race ${c.name} · ${level.name}`);
+}
+$('btn-ch-go').onclick = () => { sfx.click(); startChallenge(); };
+$('btn-ch-no').onclick = () => { sfx.click(); $('challenge').hidden = true; challenge = null; };
+
+// ---------- name tags for ghosts and live riders ----------
+const tagEls = new Map();
+function setTag(id, text, x, y, z = 0, cls = '') {
+  let el = tagEls.get(id);
+  if (!text) {
+    if (el) { el.remove(); tagEls.delete(id); }
+    return;
+  }
+  if (!el) {
+    el = document.createElement('div');
+    el.className = `tag ${cls}`;
+    $('tags').append(el);
+    tagEls.set(id, el);
+  }
+  if (el.textContent !== text) el.textContent = text;
+  tmp.set(x, y, z).project(world.camera);
+  const sx = (tmp.x * 0.5 + 0.5) * innerWidth, sy = (-tmp.y * 0.5 + 0.5) * innerHeight;
+  el.style.transform = `translate(${sx.toFixed(1)}px, ${sy.toFixed(1)}px) translate(-50%, -100%)`;
+  el.hidden = tmp.z > 1;
+}
+
+// ---------- live riders (start.ng live room) ----------
+// Courses in the room: campaign levels 0–29, today's Daily 30, anything else isn't shared.
+function courseSlot() {
+  if (state !== 'playing' && state !== 'finished') return IDLE_SLOT;
+  if (mode === 'level') return levelIndex;
+  if (mode === 'daily' && level.id === `daily-${todayUTC()}`) return 30;
+  return IDLE_SLOT;
+}
+
+const live = new LiveRoom({
+  onStatus: renderLive,
+  onPeers: renderLive,
+  onChat: onLiveChat,
+});
+
+function renderLive() {
+  const on = live.status === 'live';
+  const n = live.count;
+  $('live-count').hidden = !on;
+  $('live-count').textContent = n ? `🟢 ${n} other rider${n > 1 ? 's' : ''} online` : '🟢 Live: invite riders when they come online';
+  $('btn-race').hidden = !on;
+}
+
+// Other riders on your course, as see-through bikes in their own start.ng look.
+const peerBikes = new Map();
+function updatePeers() {
+  const slot = courseSlot();
+  const riders = slot === IDLE_SLOT ? [] : live.ridersOn(slot).slice(0, 8);
+  const seen = new Set();
+  riders.forEach((r, i) => {
+    seen.add(r.id);
+    let pb = peerBikes.get(r.id);
+    if (!pb) {
+      pb = new BikeModel(r.style ?? DEFAULT_STYLE, { ghost: true, look: { bike: 'dirt', paint: ['blue', 'green', 'pink', 'danfo'][r.id % 4] } });
+      world.scene.add(pb.root);
+      peerBikes.set(r.id, pb);
+    }
+    if (pb.root.parent !== world.scene) world.scene.add(pb.root);
+    pb.root.position.z = -2.4 - (i % 3) * 0.8;
+    pb.root.visible = true;
+    pb.update(pb.poseFromChassis(r.x, r.y, r.angle));
+    setTag(`peer${r.id}`, r.name, r.x, r.y + 1.9, pb.root.position.z);
+  });
+  for (const [id, pb] of peerBikes) {
+    if (seen.has(id)) continue;
+    pb.root.visible = false;
+    setTag(`peer${id}`, null);
+    if (!live.peers.has(id)) {
+      pb.root.removeFromParent();
+      peerBikes.delete(id);
+    }
+  }
+}
+
+// ---------- live races: invite, lobby, 3-2-1, results ----------
+const LOBBY_MS = 12000;
+let race = null; // the race you're in: { id, slot, host, startAt, riders: Map(id -> { name, time }) }
+let invite = null; // a race someone else started that you could join
+
+const slotName = (slot) => (slot === 30 ? "today's Daily" : LEVELS[slot]?.name ?? 'a course');
+
+function onLiveChat(m, mine) {
+  const [, kind, a, b] = m.text.split(':');
+  if (kind === 'race') {
+    const slot = parseInt(a, 10);
+    if (!(slot >= 0 && slot <= 30)) return;
+    const r = { id: `${m.id}-${m.at}`, slot, host: m.name, startAt: performance.now() + LOBBY_MS, riders: new Map([[m.id, { name: m.name, time: null }]]) };
+    if (mine) {
+      race = r;
+      openLobby();
+    } else if (!race) {
+      invite = r;
+      $('invite-text').textContent = `${m.name} is starting a race on ${slotName(slot)}!`;
+      $('invite').hidden = false;
+      sfx.checkpoint();
+    }
+  } else if (kind === 'join') {
+    for (const r of [race, invite]) if (r?.id === a) r.riders.set(m.id, { name: m.name, time: null });
+    renderLobby();
+  } else if (kind === 'fin') {
+    if (race?.id !== a) return;
+    const ms = parseInt(b, 10);
+    if (!(ms > 0)) return;
+    race.riders.set(m.id, { name: m.name, time: ms / 1000 });
+    renderRaceResults();
+  }
+}
+
+function openLobby() {
+  $('racepick').hidden = true;
+  $('invite').hidden = true;
+  $('menu').hidden = true;
+  $('world').hidden = true;
+  $('garage').hidden = true;
+  if (showroom) showroom.active = false;
+  $('lobby').hidden = false;
+  $('lobby-course').textContent = `${race.host}'s race on ${slotName(race.slot)}`;
+  renderLobby();
+}
+
+function renderLobby() {
+  if (!race || $('lobby').hidden) return;
+  $('lobby-riders').replaceChildren(...[...race.riders.values()].map((r) => {
+    const li = document.createElement('li');
+    li.textContent = r.name;
+    return li;
+  }));
+}
+
+function updateRaceTimers() {
+  const now = performance.now();
+  if (invite && now >= invite.startAt) {
+    invite = null;
+    $('invite').hidden = true;
+  }
+  if (race && !$('lobby').hidden) {
+    const left = Math.max(0, Math.ceil((race.startAt - now) / 1000));
+    if ($('lobby-time').textContent !== String(left)) $('lobby-time').textContent = left;
+    if (now >= race.startAt) startRace();
+  }
+}
+
+async function startRace() {
+  $('lobby').hidden = true;
+  const r = race;
+  if (r.slot === 30) loadCourse(await dailyCourse(), 'daily');
+  else loadLevel(r.slot);
+  run.race = r;
+  run.countdown = 3;
+  beginRun(`Live race · ${level.name}`);
+  $('hint').style.opacity = 0;
+}
+
+function renderRaceResults() {
+  const box = $('res-race');
+  if (!race || state !== 'finished') return;
+  const rows = [...race.riders.entries()].sort(([, a], [, b]) => (a.time ?? Infinity) - (b.time ?? Infinity));
+  box.replaceChildren(...rows.map(([id, r]) => {
+    const li = document.createElement('li');
+    li.className = id === live.me ? 'me' : '';
+    li.textContent = `${r.name}${id === live.me ? ' (you)' : ''}: ${r.time != null ? fmt(r.time) : 'still riding…'}`;
+    return li;
+  }));
+  box.hidden = false;
+}
+
+$('btn-race').onclick = () => {
+  sfx.click();
+  $('btn-race-level').textContent = `${LEVELS[levelIndex].name}`;
+  $('racepick').hidden = false;
+};
+$('btn-race-level').onclick = () => { live.say(`ww:race:${levelIndex}`); };
+$('btn-race-daily').onclick = () => { live.say('ww:race:30'); };
+$('btn-race-cancel').onclick = () => { $('racepick').hidden = true; };
+$('btn-invite-join').onclick = () => {
+  if (!invite) return;
+  sfx.click();
+  race = invite;
+  invite = null;
+  live.say(`ww:join:${race.id}`);
+  if (state === 'playing') setState('menu');
+  openLobby();
+};
+$('btn-invite-no').onclick = () => { invite = null; $('invite').hidden = true; };
+$('btn-lobby-leave').onclick = () => { race = null; $('lobby').hidden = true; setState('menu'); };
 
 // ---------- automatic quality ----------
 // "Auto" starts at High on computers and Medium on phones, then steps down while riding
@@ -1084,6 +1364,13 @@ function updateGhost() {
   const pose = ghost && settings.ghost && state === 'playing' ? ghostPose(ghost, run.time) : null;
   ghostBike.root.visible = !!pose;
   if (pose) ghostBike.update(ghostBike.poseFromChassis(pose.x, pose.y, pose.angle));
+  // A friend's ghost always shows (that's the point of the link).
+  const fp = friend && (state === 'playing' || state === 'finished') ? ghostPose(friend.ghost, run.time) : null;
+  friendBike.root.visible = !!fp;
+  if (fp) {
+    friendBike.update(friendBike.poseFromChassis(fp.x, fp.y, fp.angle));
+    setTag('friend', `${friend.name} 👻`, fp.x, fp.y + 1.9, -1.6, 'friend');
+  } else setTag('friend', null);
 }
 
 function pause() {
@@ -1091,7 +1378,9 @@ function pause() {
 }
 
 function goMenu() {
-  if (mode === 'custom') {
+  race = null;
+  $('res-race').hidden = true;
+  if (mode === 'custom' && level?.id === 'custom-editor') {
     location.href = 'editor/';
     return;
   }
@@ -1116,7 +1405,7 @@ setupInput({
       else if (!$('board').hidden) $('board').hidden = true;
     }
     if (code === 'Enter' && state === 'paused') setState('playing');
-    if ((code === 'Enter' || code === 'Space') && $('settings').hidden && $('board').hidden && $('missions').hidden && $('world').hidden && $('garage').hidden) {
+    if ((code === 'Enter' || code === 'Space') && $('settings').hidden && $('board').hidden && $('missions').hidden && $('world').hidden && $('garage').hidden && $('lobby').hidden && $('racepick').hidden && $('challenge').hidden) {
       if (state === 'finished') ($('btn-next').hidden ? $('btn-retry') : $('btn-next')).click();
       else if (state === 'menu') startLevel(levelIndex);
     }
@@ -1174,13 +1463,28 @@ function frame(dt) {
   world.zoom = slowmo > 0 ? 0.8 : 1;
   const gdt = dt * scale;
 
-  if (state === 'playing') {
+  if (state === 'playing' && run.countdown > 0) {
+    // Live race start: 3 · 2 · 1 · GO, everyone together. Nothing moves until GO.
+    run.countdown -= dt;
+    const n = Math.ceil(run.countdown);
+    const cd = $('countdown');
+    cd.hidden = false;
+    if (cd.textContent !== String(n) && n > 0) { cd.textContent = n; sfx.star(0); }
+    if (run.countdown <= 0) {
+      cd.textContent = 'GO!';
+      sfx.finish();
+      setTimeout(() => (cd.hidden = true), 700);
+      run.started = true;
+    }
+    bike.update(sim.snapshot(), { time: clock });
+    world.follow(sim.chassis.getPosition(), sim.chassis.getLinearVelocity(), false, dt);
+  } else if (state === 'playing') {
     const input = readInput();
     if (!run.started && anyInput()) run.started = true;
-    const live = run.crashTimer ? { throttle: 0, brake: 0, lean: 0 } : input;
+    const controls = run.crashTimer ? { throttle: 0, brake: 0, lean: 0 } : input;
     acc += gdt;
     while (acc >= STEP) {
-      physicsStep(live);
+      physicsStep(controls);
       acc -= STEP;
     }
     if (!sim.crashed) onTrickEvent(tricks.update(gdt));
@@ -1215,6 +1519,7 @@ function frame(dt) {
     if (state === 'playing') updateHud();
     bike.update(sim.snapshot(), { lean: input.lean, time: clock, speed: sim.speed });
     updateGhost();
+    live.sendPose(courseSlot(), p.x, p.y, sim.chassis.getAngle(), run.started && !run.finished);
     world.follow(p, sim.chassis.getLinearVelocity(), !sim.rearGround && !sim.frontGround, dt);
   } else if (state === 'finished') {
     // Let the bike roll to a quiet stop.
@@ -1254,6 +1559,8 @@ function frame(dt) {
     const r = sim.rear.getPosition(), v = sim.chassis.getLinearVelocity();
     particles.trail(trail, r.x, r.y, v.x, v.y, clock);
   }
+  updatePeers();
+  updateRaceTimers();
   particles.update(state === 'paused' ? 0 : gdt);
   world.syncDynamics();
   world.animate(clock);
@@ -1265,6 +1572,8 @@ function frame(dt) {
 applySettings();
 loadLevel(0);
 setState('menu');
+readRaceLink();
+live.connect();
 if (new URLSearchParams(location.search).get('play') === 'editor') startCustom();
 refreshPlayer();
 requestAnimationFrame(tick);
@@ -1274,5 +1583,6 @@ requestAnimationFrame(tick);
 window.__ww = {
   get sim() { return sim; }, get run() { return run; }, get state() { return state; }, get mode() { return mode; },
   startLevel, startDaily, startFrenzy, player, progress, bike, goMenu, world, tricks, totals, missions,
+  live, get race() { return race; }, get challenge() { return challenge; }, get lastRun() { return lastRun; },
   advance(seconds, fps = 60) { for (let t = 0; t < seconds; t += 1 / fps) frame(1 / fps); },
 };

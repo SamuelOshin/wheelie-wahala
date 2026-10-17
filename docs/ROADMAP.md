@@ -1,6 +1,7 @@
 # Wheelie Wahala: roadmap to a game people play every day
 
-Status: **Phases 1–5 are live** (Phase 5: 56% smaller download, offline play, auto quality, controllers,
+Status: **all six phases are live** (Phase 6: share cards, race-my-ghost links, live riders and live
+races in start.ng's room). **Phases 1–5** (Phase 5: 56% smaller download, offline play, auto quality, controllers,
 accessibility; translations not done yet). **Phases 1–4** (Phase 4: the Garage, with 5 bikes within 2% of each other's pace,
 8 paints, 7 trails). Phases 1–3: Flip Fever, Come Back Tomorrow, and Lagos & Ice (30 levels, boost pads,
 see-saws, crates, level editor). Moving lifts were left out: the autopilot can't time them, so their
