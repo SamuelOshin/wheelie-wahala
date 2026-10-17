@@ -224,7 +224,7 @@
         <div class="row">
           <span>Quality</span>
           <div class="seg" id="set-quality">
-            <button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button>
+            <button data-v="auto">Auto</button><button data-v="low">Low</button><button data-v="medium">Medium</button><button data-v="high">High</button>
           </div>
         </div>
         <div class="row">
@@ -233,6 +233,23 @@
             <button data-v="auto">Auto</button><button data-v="on">On</button><button data-v="off">Off</button>
           </div>
         </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Accessibility</legend>
+        <label class="row check">
+          <span>Reduce motion (no shake, slow-mo or flashes)</span>
+          <input id="set-reduceMotion" type="checkbox">
+        </label>
+        <label class="row check">
+          <span>Left-handed touch buttons</span>
+          <input id="set-leftHanded" type="checkbox">
+        </label>
+        <label class="row check">
+          <span>Bigger touch buttons</span>
+          <input id="set-bigButtons" type="checkbox">
+        </label>
+        <p class="note">Controllers work too: A ride · B brake · stick lean · Start pause · Y checkpoint.</p>
       </fieldset>
 
       <div class="menu-row">
@@ -254,9 +271,17 @@
   </svg>
 
   <div id="flash"></div>
+  <!-- Screen readers hear tricks, crashes and checkpoints here. -->
+  <div id="sr" class="sr-only" aria-live="polite"></div>
 
   <div id="rotate">📱↻<br>Turn your phone sideways to ride</div>
 
-  <script type="module" src="./src/main.js"></script>
+  <!-- game:start -->
+  <script type="module">
+    // The built game. Add ?src to the address to run the unbundled source instead (for development).
+    if (new URLSearchParams(location.search).has('src')) import('./src/main.js');
+    else import('./build/game-5DZSH3MI.js');
+  </script>
+  <!-- game:end -->
 </body>
 </html>

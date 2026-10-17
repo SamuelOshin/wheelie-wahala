@@ -9,14 +9,23 @@ export const DEFAULTS = {
   music: 70,
   sfx: 80,
   engine: 60,
-  quality: 'high', // high | medium | low
+  quality: 'auto', // auto | high | medium | low
+  qualityPicked: false, // true once the player chooses a quality themselves
   touch: 'auto', // auto | on | off
+  // Accessibility
+  reduceMotion: typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches,
+  leftHanded: false, // swap the touch buttons: brake/GO on the left
+  bigButtons: false,
 };
 
 export function loadSettings() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && typeof s === 'object') return sanitize({ ...DEFAULTS, ...s });
+    if (s && typeof s === 'object') {
+      // Quality used to default to High. Unless you picked one yourself, you now get Auto.
+      if (!s.qualityPicked) s.quality = 'auto';
+      return sanitize({ ...DEFAULTS, ...s });
+    }
   } catch {}
   return { ...DEFAULTS };
 }
@@ -37,8 +46,12 @@ export function sanitize(s) {
     music: clamp(s.music),
     sfx: clamp(s.sfx),
     engine: clamp(s.engine),
-    quality: ['high', 'medium', 'low'].includes(s.quality) ? s.quality : DEFAULTS.quality,
+    quality: ['auto', 'high', 'medium', 'low'].includes(s.quality) ? s.quality : DEFAULTS.quality,
+    qualityPicked: !!s.qualityPicked,
     touch: ['auto', 'on', 'off'].includes(s.touch) ? s.touch : DEFAULTS.touch,
+    reduceMotion: !!s.reduceMotion,
+    leftHanded: !!s.leftHanded,
+    bigButtons: !!s.bigButtons,
   };
 }
 

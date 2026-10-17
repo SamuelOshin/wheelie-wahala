@@ -1,0 +1,13 @@
+{
+  "name": "wheelie-wahala",
+  "private": true,
+  "type": "module",
+  "description": "Dev tools only. start.ng serves the committed files; it never runs npm.",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "check": "node tools/level-check.mjs && node tools/bike-check.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.5"
+  }
+}

@@ -45,6 +45,18 @@ milestones at 25, 100, 250, 500 and up.
   different (grip, spin speed, weight, wheelbase) but are tuned to the same pace:
   `node tools/bike-check.mjs` rides all 30 levels on each bike and compares total times.
 
+## Reach
+
+- **Fast loading**: the bundled build above, and the Garage and the Daily/Frenzy course tools load
+  only when first used.
+- **Plays offline** after the first visit (service worker). Updates arrive on the next reload.
+- **Auto quality** (default): High on computers, Medium on phones, and it steps down if the frame
+  rate stays under 40.
+- **Controllers**: A / right trigger ride, B / left trigger brake, stick or D-pad lean, Start pause,
+  Y checkpoint, Back restart.
+- **Accessibility** (Settings): reduce motion, left-handed touch buttons, bigger touch buttons, and
+  screen-reader announcements for tricks, crashes and checkpoints.
+
 ## Settings
 
 ⚙️ on the menu or pause screen:
@@ -78,6 +90,23 @@ The music is a quiet generated loop, turned down while you ride.
 - Levels are short lists of pieces (`flat`, `ramp`, `loop`, `gap`, ...) in `src/levels.js`, turned into
   track by `src/track.js`.
 - Sound is generated with WebAudio, so there are no audio files.
+
+## Building (do this before every push)
+
+The page loads a bundled, minified build from `build/`, not `src/` directly:
+
+```bash
+npm install
+npm run build
+```
+
+`npm run build` (esbuild) bundles `src/` with three.js and Planck into 6 files (about 180 KB
+compressed, down from 24 files and 407 KB), with hashed file names. It also points `index.html` at the
+new files and writes `sw.js`, the service worker that keeps the game playable offline. Commit `build/`,
+`index.html` and `sw.js` together. start.ng never runs npm.
+
+For development, add `?src` to the address to run the unbundled source. The service worker only runs
+on start.ng, or locally with `?sw`.
 
 ## Run it locally
 

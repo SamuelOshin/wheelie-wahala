@@ -314,3 +314,15 @@ input { user-select: text; -webkit-user-select: text; }
   .garage-detail .big { font-size: 16px; padding: 8px 14px; }
   .garage-panel .seg button { padding: 4px 10px; }
 }
+
+/* Accessibility */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+body.calm .popup { animation: calm-pop 1.1s ease-out forwards; }
+@keyframes calm-pop { 0%, 80% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 0); } }
+body.calm .flip-count.bump, body.calm .combo-x.bump, body.calm .coins.bump, body.calm .goals li.ok.new, body.calm .banner { animation: none; }
+body.calm .hud-time-low { animation: none; }
+body.left-handed #touch { flex-direction: row-reverse; }
+body.big-buttons #touch button { width: 106px; height: 106px; font-size: 34px; }
+body.big-buttons #touch button.go { width: 120px; height: 120px; }
+body.big-buttons #touch button.brake { font-size: 20px; }
+:focus-visible { outline: 3px solid #3a86ff; outline-offset: 2px; }

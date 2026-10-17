@@ -46,12 +46,42 @@ export function setupInput({ onKey } = {}) {
   }
 }
 
+// ---------- gamepads ----------
+// Standard layout: A / right trigger ride, B / left trigger brake, left stick or D-pad lean,
+// Start pause (and confirm on menus), Y back to checkpoint, Back/Select restart.
+const pad = { throttle: false, brake: false, lean: 0, connected: false };
+const was = {};
+const PRESS = { 9: 'Escape', 0: 'Enter', 3: 'KeyR', 8: 'KeyT' };
+
+// Call once per frame: reads the first gamepad and turns button presses into key codes.
+export function pollGamepad() {
+  const gp = [...(navigator.getGamepads?.() ?? [])].find((g) => g && g.connected);
+  pad.connected = !!gp;
+  if (!gp) {
+    pad.throttle = pad.brake = false;
+    pad.lean = 0;
+    return;
+  }
+  const b = (i) => gp.buttons[i]?.pressed || (gp.buttons[i]?.value ?? 0) > 0.4;
+  pad.throttle = b(0) || b(7);
+  pad.brake = b(1) || b(6);
+  const stick = Math.abs(gp.axes[0] ?? 0) > 0.3 ? gp.axes[0] : 0;
+  pad.lean = (b(14) ? 1 : 0) - (b(15) ? 1 : 0) || -Math.sign(stick);
+  for (const [i, code] of Object.entries(PRESS)) {
+    const down = b(+i);
+    if (down && !was[i]) onPress(code, 'pad');
+    was[i] = down;
+  }
+}
+
+export const gamepadConnected = () => pad.connected;
+
 export function readInput() {
   const on = (k) => keys.has(k) || touch[k];
   return {
-    throttle: on('throttle') ? 1 : 0,
-    brake: on('brake') ? 1 : 0,
-    lean: (on('back') ? 1 : 0) - (on('forward') ? 1 : 0),
+    throttle: on('throttle') || pad.throttle ? 1 : 0,
+    brake: on('brake') || pad.brake ? 1 : 0,
+    lean: Math.max(-1, Math.min(1, (on('back') ? 1 : 0) - (on('forward') ? 1 : 0) + pad.lean)),
   };
 }
 

@@ -7,15 +7,11 @@ import { LEVELS, WORLDS } from './levels.js';
 import { DEFAULT_STYLE } from './rider.js';
 import { FlipTracker } from './flips.js';
 import { Particles, buzz } from './fx.js';
-import { generateCourse } from './generator.js';
-import { rideCourse } from './autopilot.js';
 import { Missions } from './missions.js';
 import { GhostRecorder, loadGhost, saveGhost, ghostPose, pruneDailyGhosts } from './ghost.js';
 import { todayUTC, addDays, untilTomorrowUTC } from './rng.js';
-import { setupInput, readInput, anyInput, isTouch, setTouchMode } from './input.js';
+import { setupInput, readInput, anyInput, isTouch, setTouchMode, pollGamepad } from './input.js';
 import { defaultGarage, tuningFor } from './garage.js';
-import { Showroom } from './showroom.js';
-import { setupGarage } from './garageui.js';
 import { unlockAudio, setEngine, sfx, toggleMute, isMuted, setMusicLevel, setVolumes, suspendAudio } from './audio.js';
 import { loadSettings, saveSettings, sanitize, cleanName } from './settings.js';
 import * as THREE from '../vendor/three.module.js';
@@ -26,7 +22,8 @@ const STEP = 1 / 120;
 const MILESTONES = [25, 100, 250, 500, 1000, 2500, 5000, 10000];
 const FRENZY_TIME = 60; // seconds
 const FRENZY_BONUS = 3; // seconds added for each trick at ×3 combo or more
-const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+// Reduce motion (Settings → Accessibility): no shake, slow-mo, flashes or bouncy popups.
+const calm = () => !!settings?.reduceMotion;
 const num = (n) => Math.round(n).toLocaleString('en');
 
 // ---------- saved progress (this browser only) ----------
@@ -165,7 +162,7 @@ async function lookUpPlayer() {
   if (JSON.stringify(player.style) !== before) {
     bike.setStyle(player.style);
     ghostBike.setStyle(player.style);
-    showroom.setStyle(player.style);
+    showroom?.setStyle(player.style);
   }
 }
 
@@ -250,10 +247,14 @@ function startLevel(i) {
 
 // Today's course: generated from the date, checked by the autopilot (a variant is tried if
 // it can't ride it cleanly), and the target time set from the autopilot's time.
+// The generator and autopilot only load when you first play a Daily or Frenzy.
+const courseTools = () => Promise.all([import('./generator.js'), import('./autopilot.js')]);
+
 let dailyCache = null;
-function dailyCourse() {
+async function dailyCourse() {
   const date = todayUTC();
   if (dailyCache?.date === date) return dailyCache.course;
+  const [{ generateCourse }, { rideCourse }] = await courseTools();
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem('wheelie-wahala-daily-v2')); } catch {}
   let course;
@@ -277,14 +278,15 @@ function dailyCourse() {
   return course;
 }
 
-function startDaily() {
+async function startDaily() {
   sfx.click();
-  loadCourse(dailyCourse(), 'daily');
+  loadCourse(await dailyCourse(), 'daily');
   beginRun(`Daily · ${todayUTC()}`);
 }
 
-function startFrenzy(seed = String(Date.now())) {
+async function startFrenzy(seed = String(Date.now())) {
   sfx.click();
+  const [{ generateCourse }] = await courseTools();
   const course = generateCourse(seed, { mode: 'frenzy', length: 2400 });
   course.seed = seed;
   loadCourse(course, 'frenzy');
@@ -405,18 +407,23 @@ function popup(lines, cls = '') {
   }
   $('popups').append(el);
   setTimeout(() => el.remove(), 1300);
+  $('sr').textContent = lines.map(([t]) => t).join(', ');
 }
 
 function flash() {
-  if (reducedMotion) return;
+  if (calm()) return;
   const f = $('flash');
   f.classList.remove('on');
   void f.offsetWidth;
   f.classList.add('on');
 }
 
+function shake(amount) {
+  if (!calm()) world.shake(amount);
+}
+
 function slowMo(seconds) {
-  if (!reducedMotion) slowmo = Math.max(slowmo, seconds);
+  if (!calm()) slowmo = Math.max(slowmo, seconds);
 }
 
 // ---------- menu ----------
@@ -537,7 +544,7 @@ function onLand(e) {
   const strength = Math.min(2, e.impact / 7);
   const p = sim.rear.getPosition();
   particles.dust(p.x, p.y - 0.3, strength);
-  world.shake(Math.min(0.45, e.impact * 0.035));
+  shake(Math.min(0.45, e.impact * 0.035));
   if (e.impact > 5) sfx.land();
   if (e.impact > 10) buzz(18);
 }
@@ -595,7 +602,7 @@ function crash() {
   bike.throwRider(sim.chassis.getLinearVelocity());
   const c = sim.chassis.getPosition();
   particles.sparks(c.x, c.y);
-  world.shake(0.6);
+  shake(0.6);
   sfx.crash();
   buzz(90);
   popup(lost.bailed ? [['BAILED!'], ['trick lost', 'pts']] : lost.comboLost ? [['OUCH!'], ['combo lost', 'pts']] : [['OUCH!']], 'bad');
@@ -733,7 +740,7 @@ function finishRun() {
   saveProgress();
   sfx.finish();
   const c = sim.chassis.getPosition();
-  particles.confetti(c.x + 4, c.y + 1);
+  if (!calm()) particles.confetti(c.x + 4, c.y + 1);
   setState('finished');
 
   $('banner').textContent = banner;
@@ -854,10 +861,15 @@ function nextLevel() {
 $('btn-next').onclick = () => startLevel(nextLevel() ?? levelIndex);
 
 // ---------- garage ----------
-const showroom = new Showroom(player.style, look());
-showroom.trail = progress.garage.trail;
-showroom.attach($('game'));
-const garageUI = setupGarage({
+// The showroom and shop load the first time you open the Garage.
+let showroom = null, garageUI = null;
+async function loadGarage() {
+  if (garageUI) return;
+  const [{ Showroom }, { setupGarage }] = await Promise.all([import('./showroom.js'), import('./garageui.js')]);
+  showroom = new Showroom(player.style, look());
+  showroom.trail = progress.garage.trail;
+  showroom.attach($('game'));
+  garageUI = setupGarage({
   progress,
   save: saveProgress,
   spend(n) {
@@ -874,10 +886,12 @@ const garageUI = setupGarage({
   },
   sfx,
   popup,
-});
+  });
+}
 
-function openGarage() {
+async function openGarage() {
   sfx.click();
+  await loadGarage();
   garageUI.open();
   showroom.active = true;
   $('menu').hidden = true;
@@ -894,13 +908,54 @@ function closeGarage() {
 $('btn-garage').onclick = openGarage;
 $('btn-garage-back').onclick = () => { sfx.click(); closeGarage(); };
 
+// ---------- automatic quality ----------
+// "Auto" starts at High on computers and Medium on phones, then steps down while riding
+// if the frame rate stays low. The level it settles on is remembered for next time.
+const QUALITY_STEPS = ['high', 'medium', 'low'];
+const autoQuality = { level: 'high', time: 0, frames: 0, slow: 0 };
+try { autoQuality.level = localStorage.getItem('wheelie-wahala-autoq') || (isTouch() ? 'medium' : 'high'); } catch {}
+
+function watchFrameRate(dt) {
+  if (settings.quality !== 'auto' || state !== 'playing' || document.hidden) return;
+  autoQuality.time += dt;
+  autoQuality.frames++;
+  if (autoQuality.time < 2) return;
+  const fps = autoQuality.frames / autoQuality.time;
+  autoQuality.time = autoQuality.frames = 0;
+  autoQuality.slow = fps < 40 ? autoQuality.slow + 1 : 0;
+  const i = QUALITY_STEPS.indexOf(autoQuality.level);
+  if (autoQuality.slow >= 2 && i < QUALITY_STEPS.length - 1) {
+    autoQuality.level = QUALITY_STEPS[i + 1];
+    autoQuality.slow = 0;
+    try { localStorage.setItem('wheelie-wahala-autoq', autoQuality.level); } catch {}
+    world.setQuality(autoQuality.level);
+    popup([['Smoother graphics'], [`quality set to ${autoQuality.level}`, 'pts']], 'small');
+  }
+}
+
+// ---------- offline play ----------
+// On start.ng the service worker keeps the game's files so it starts with no connection.
+// Locally it only runs with ?sw, so development files never get stuck in a cache.
+{
+  const params = new URLSearchParams(location.search);
+  if ('serviceWorker' in navigator && !params.has('src') && (startng.onStartNg() || params.has('sw'))) {
+    const register = () => navigator.serviceWorker.register('./sw.js').catch(() => {});
+    // The game loads after the page, so 'load' may already have happened.
+    if (document.readyState === 'complete') register();
+    else addEventListener('load', register);
+  }
+}
+
 // ---------- settings ----------
 let settings = loadSettings();
 
 function applySettings() {
   setVolumes({ master: settings.master / 100, music: settings.music / 100, sfx: settings.sfx / 100, engine: settings.engine / 100 });
-  world.setQuality(settings.quality);
+  world.setQuality(settings.quality === 'auto' ? autoQuality.level : settings.quality);
   setTouchMode(settings.touch);
+  document.body.classList.toggle('calm', settings.reduceMotion);
+  document.body.classList.toggle('left-handed', settings.leftHanded);
+  document.body.classList.toggle('big-buttons', settings.bigButtons);
   $('touch').hidden = !(state === 'playing' && isTouch());
   $('controls-help').textContent = isTouch()
     ? 'Left: lean back / forward · Right: brake / GO · ⟲ twice to restart'
@@ -916,6 +971,7 @@ function openSettings() {
   $('set-name').placeholder = startngConnected ? player.name : 'Rider';
   $('set-nametag').checked = settings.nameTag;
   $('set-ghost').checked = settings.ghost;
+  for (const k of ['reduceMotion', 'leftHanded', 'bigButtons']) $(`set-${k}`).checked = settings[k];
   for (const k of ['master', 'music', 'sfx', 'engine']) {
     const input = $(`set-${k}`);
     input.value = settings[k];
@@ -940,6 +996,9 @@ $('set-name').addEventListener('input', (e) => updateSetting('riderName', e.targ
 $('set-name').addEventListener('change', (e) => { e.target.value = cleanName(e.target.value); });
 $('set-name').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
 $('set-nametag').addEventListener('change', (e) => updateSetting('nameTag', e.target.checked));
+for (const k of ['reduceMotion', 'leftHanded', 'bigButtons']) {
+  $(`set-${k}`).addEventListener('change', (e) => updateSetting(k, e.target.checked));
+}
 $('set-ghost').addEventListener('change', (e) => {
   updateSetting('ghost', e.target.checked);
   ghost = settings.ghost && mode !== 'frenzy' ? loadGhost(level.id) : null;
@@ -956,6 +1015,7 @@ for (const [id, key] of [['set-quality', 'quality'], ['set-touch', 'touch']]) {
     b.onclick = () => {
       sfx.click();
       for (const o of $(id).children) o.classList.toggle('on', o === b);
+      if (key === 'quality') settings.qualityPicked = true;
       updateSetting(key, b.dataset.v);
     };
   }
@@ -1055,11 +1115,15 @@ setupInput({
       else if (state === 'paused') setState('playing');
       else if (!$('board').hidden) $('board').hidden = true;
     }
+    if (code === 'Enter' && state === 'paused') setState('playing');
     if ((code === 'Enter' || code === 'Space') && $('settings').hidden && $('board').hidden && $('missions').hidden && $('world').hidden && $('garage').hidden) {
       if (state === 'finished') ($('btn-next').hidden ? $('btn-retry') : $('btn-next')).click();
       else if (state === 'menu') startLevel(levelIndex);
     }
   },
+});
+addEventListener('gamepadconnected', () => {
+  popup([['🎮 Controller ready'], ['A ride · B brake · stick lean · Start pause', 'pts']], 'small');
 });
 const autoPause = !new URLSearchParams(location.search).has('nopause'); // ?nopause for automated tests
 document.addEventListener('visibilitychange', () => {
@@ -1079,7 +1143,7 @@ function physicsStep(input) {
 
 function onBoost() {
   sfx.boost();
-  world.shake(0.15);
+  shake(0.15);
   buzz(20);
   popup([['BOOST!']], 'small');
 }
@@ -1102,6 +1166,8 @@ function tick(now) {
 
 function frame(dt) {
   clock += dt;
+  watchFrameRate(dt);
+  pollGamepad();
   // Slow motion on big tricks: game time runs at 35% and the camera punches in.
   const scale = slowmo > 0 ? 0.35 : 1;
   slowmo = Math.max(0, slowmo - dt);
@@ -1191,7 +1257,7 @@ function frame(dt) {
   particles.update(state === 'paused' ? 0 : gdt);
   world.syncDynamics();
   world.animate(clock);
-  if (showroom.active) showroom.render(world.renderer, clock, dt);
+  if (showroom?.active) showroom.render(world.renderer, clock, dt);
   else world.render();
   updateOverlays();
 }

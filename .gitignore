@@ -2,3 +2,4 @@
 .claude/
 # Reference footage is someone else's copyrighted ad; keep it local only.
 reference/
+node_modules/
