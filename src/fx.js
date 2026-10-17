@@ -90,6 +90,40 @@ export class Particles {
     }
   }
 
+  // One puff of a Garage trail behind the rear wheel. (vx, vy): which way the bike is moving.
+  trail(kind, x, y, vx, vy, time) {
+    const back = -Math.sign(vx || 1);
+    const jitter = () => (Math.random() - 0.5) * 0.6;
+    switch (kind) {
+      case 'smoke':
+        this.spawn(x, y, 0, back * 1.5 + jitter(), 0.8 + jitter(), jitter(), '#c9c2b8', 0.9, 0.55, 1.2, 1.2);
+        break;
+      case 'sparks':
+        for (let i = 0; i < 2; i++) this.spawn(x, y - 0.25, 0, back * (2 + Math.random() * 3), Math.random() * 3, jitter() * 2, Math.random() < 0.5 ? '#ffd23f' : '#ff7b29', 0.3, 0.16, -12, 0.5);
+        break;
+      case 'confetti': {
+        const colors = ['#ff4d6d', '#ffd23f', '#36c25b', '#3a86ff', '#ffffff'];
+        this.spawn(x, y, 0, back * 1.2 + jitter(), 1.5 + Math.random(), jitter() * 2, colors[Math.floor(Math.random() * colors.length)], 1.1, 0.22, -4, 1);
+        break;
+      }
+      case 'naija': {
+        // Green, white, green, stacked like the flag's bands.
+        ['#008751', '#ffffff', '#008751'].forEach((c, i) => this.spawn(x, y + 0.24 - i * 0.24, (i - 1) * 0.1, back * 0.6, 0, 0, c, 0.7, 0.34, 0, 0.5));
+        break;
+      }
+      case 'fire': {
+        const colors = ['#ffd23f', '#ff9f1c', '#ff5a1f', '#e5383b'];
+        this.spawn(x, y, 0, back * 1.5 + jitter(), 1.5 + Math.random() * 1.5, jitter(), colors[Math.floor(Math.random() * colors.length)], 0.4, 0.42, 2, 2);
+        break;
+      }
+      case 'rainbow': {
+        const c = new THREE.Color().setHSL((time * 0.5) % 1, 0.9, 0.6);
+        for (let i = 0; i < 2; i++) this.spawn(x, y + (i - 0.5) * 0.2, 0, back * 0.5, 0, 0, c.getStyle(), 0.9, 0.48, 0, 0.3);
+        break;
+      }
+    }
+  }
+
   update(dt) {
     for (let i = 0; i < MAX; i++) {
       const p = this.p[i];

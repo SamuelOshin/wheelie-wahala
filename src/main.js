@@ -13,6 +13,9 @@ import { Missions } from './missions.js';
 import { GhostRecorder, loadGhost, saveGhost, ghostPose, pruneDailyGhosts } from './ghost.js';
 import { todayUTC, addDays, untilTomorrowUTC } from './rng.js';
 import { setupInput, readInput, anyInput, isTouch, setTouchMode } from './input.js';
+import { defaultGarage, tuningFor } from './garage.js';
+import { Showroom } from './showroom.js';
+import { setupGarage } from './garageui.js';
 import { unlockAudio, setEngine, sfx, toggleMute, isMuted, setMusicLevel, setVolumes, suspendAudio } from './audio.js';
 import { loadSettings, saveSettings, sanitize, cleanName } from './settings.js';
 import * as THREE from '../vendor/three.module.js';
@@ -58,6 +61,7 @@ function loadProgress() {
   p.missions ??= {};
   p.daily ??= { streak: 0, last: null, date: null, best: null };
   p.frenzy ??= { best: 0, runs: 0 };
+  p.garage ??= defaultGarage();
   return p;
 }
 const progress = loadProgress();
@@ -122,7 +126,7 @@ function openMissions() {
   missions.collect();
   saveProgress();
   renderMissionList($('missions-list'));
-  $('coins-note').textContent = `You have ${num(progress.coins)} coins. The Garage, where coins buy new bikes, is coming soon!`;
+  $('coins-note').textContent = `You have ${num(progress.coins)} coins. Spend them on bikes, paint and trails in the Garage!`;
   $('missions').hidden = false;
   renderMenuBadges();
 }
@@ -161,6 +165,7 @@ async function lookUpPlayer() {
   if (JSON.stringify(player.style) !== before) {
     bike.setStyle(player.style);
     ghostBike.setStyle(player.style);
+    showroom.setStyle(player.style);
   }
 }
 
@@ -183,8 +188,9 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 
 // ---------- world ----------
 const world = new World($('game'));
-const bike = new BikeModel(player.style);
-const ghostBike = new BikeModel(player.style, { ghost: true });
+const look = () => ({ bike: progress.garage.bike, paint: progress.garage.paint });
+const bike = new BikeModel(player.style, { look: look() });
+const ghostBike = new BikeModel(player.style, { ghost: true, look: look() });
 ghostBike.root.position.z = -0.8; // a lane behind you, so it still shows when you're level
 world.scene.add(bike.root, ghostBike.root);
 const particles = new Particles(world.scene);
@@ -203,7 +209,7 @@ function loadCourse(course, courseMode) {
   mode = courseMode;
   level = course;
   track = buildTrack(level);
-  sim = new BikeSim(track);
+  sim = new BikeSim(track, tuningFor(progress.garage.bike)); // your bike's feel
   world.buildLevel(level, track);
   world.attachDynamics(sim);
   world.scene.add(bike.root, ghostBike.root);
@@ -330,6 +336,8 @@ function setState(s) {
   document.body.classList.toggle('playing', s === 'playing' || s === 'paused');
   $('menu').hidden = s !== 'menu';
   $('world').hidden = true;
+  $('garage').hidden = true;
+  if (showroom) showroom.active = false;
   $('pause').hidden = s !== 'paused';
   $('finish').hidden = s !== 'finished';
   $('hud').hidden = !(s === 'playing' || s === 'paused');
@@ -845,6 +853,47 @@ function nextLevel() {
 }
 $('btn-next').onclick = () => startLevel(nextLevel() ?? levelIndex);
 
+// ---------- garage ----------
+const showroom = new Showroom(player.style, look());
+showroom.trail = progress.garage.trail;
+showroom.attach($('game'));
+const garageUI = setupGarage({
+  progress,
+  save: saveProgress,
+  spend(n) {
+    if (progress.coins < n) return false;
+    progress.coins -= n;
+    renderCoins(true);
+    saveProgress();
+    return true;
+  },
+  showroom,
+  onEquip() {
+    bike.setLook(look());
+    ghostBike.setLook(look());
+  },
+  sfx,
+  popup,
+});
+
+function openGarage() {
+  sfx.click();
+  garageUI.open();
+  showroom.active = true;
+  $('menu').hidden = true;
+  $('player-card').hidden = true;
+  $('garage').hidden = false;
+}
+
+function closeGarage() {
+  garageUI.reset();
+  showroom.active = false;
+  $('garage').hidden = true;
+  setState('menu');
+}
+$('btn-garage').onclick = openGarage;
+$('btn-garage-back').onclick = () => { sfx.click(); closeGarage(); };
+
 // ---------- settings ----------
 let settings = loadSettings();
 
@@ -1001,11 +1050,12 @@ setupInput({
       if (!$('settings').hidden) $('settings').hidden = true;
       else if (!$('missions').hidden) $('missions').hidden = true;
       else if (!$('world').hidden) closeWorld();
+      else if (!$('garage').hidden) closeGarage();
       else if (state === 'playing') pause();
       else if (state === 'paused') setState('playing');
       else if (!$('board').hidden) $('board').hidden = true;
     }
-    if ((code === 'Enter' || code === 'Space') && $('settings').hidden && $('board').hidden && $('missions').hidden && $('world').hidden) {
+    if ((code === 'Enter' || code === 'Space') && $('settings').hidden && $('board').hidden && $('missions').hidden && $('world').hidden && $('garage').hidden) {
       if (state === 'finished') ($('btn-next').hidden ? $('btn-retry') : $('btn-next')).click();
       else if (state === 'menu') startLevel(levelIndex);
     }
@@ -1132,10 +1182,17 @@ function frame(dt) {
     setEngine(0, 0, false);
   }
 
+  // Your trail streams from the rear wheel while you ride.
+  const trail = progress.garage.trail;
+  if (trail !== 'none' && state === 'playing' && !sim.crashed && sim.speed > 4) {
+    const r = sim.rear.getPosition(), v = sim.chassis.getLinearVelocity();
+    particles.trail(trail, r.x, r.y, v.x, v.y, clock);
+  }
   particles.update(state === 'paused' ? 0 : gdt);
   world.syncDynamics();
   world.animate(clock);
-  world.render();
+  if (showroom.active) showroom.render(world.renderer, clock, dt);
+  else world.render();
   updateOverlays();
 }
 

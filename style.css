@@ -255,3 +255,62 @@ input { user-select: text; -webkit-user-select: text; }
   .level-grid .level .name { font-size: 13px; min-height: 0; }
   .world-head h2 { font-size: 26px; }
 }
+
+/* Garage */
+.garage { justify-content: space-between; padding: max(14px, env(safe-area-inset-top)) 16px 16px; background: none; }
+.garage-top { display: flex; align-items: center; gap: 14px; width: min(980px, 100%); }
+.garage-top h2 { margin: 0; font: 36px var(--display); color: #fff; text-shadow: 0 3px 0 #0a1450; }
+.garage-hint { margin-left: auto; margin-right: 120px; color: #cfe0ff; font-weight: 800; font-size: 13px; }
+.garage-panel { width: min(980px, 100%); max-height: 48vh; align-items: stretch; gap: 10px; padding: 14px 16px; box-shadow: 0 8px 0 #0a1450; }
+.garage-panel .seg { align-self: center; }
+.garage-body { display: grid; grid-template-columns: 1fr 300px; gap: 14px; min-height: 0; overflow: hidden; }
+.garage-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; overflow-y: auto; align-content: start; padding: 2px; }
+.gitem { display: grid; justify-items: center; gap: 4px; padding: 10px 6px; border: 3px solid transparent; border-radius: 14px; background: #f6e9cf; font-weight: 800; }
+.gitem.picked { border-color: var(--orange); background: #fff; }
+.gicon { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; font-size: 24px; background: #fff; box-shadow: inset 0 -3px 0 rgba(0,0,0,.12); }
+.gname { font-size: 14px; text-align: center; }
+.gtag { font-size: 12px; opacity: .75; display: inline-flex; align-items: center; }
+.gtag.eq { color: #1f7a37; opacity: 1; }
+.garage-detail { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; }
+.garage-detail h3 { margin: 0; font: 26px var(--display); color: var(--deep); }
+.garage-detail p { margin: 0; font-weight: 700; }
+.garage-detail .gfair { font-size: 12px; opacity: .65; }
+.garage-detail .big { margin-top: auto; display: inline-flex; justify-content: center; align-items: center; }
+.garage-detail .big:disabled { background: #9bb8a4; box-shadow: none; cursor: default; }
+.garage-detail .big.nope { animation: nope .4s; }
+@keyframes nope { 20%, 60% { transform: translateX(-6px); } 40%, 80% { transform: translateX(6px); } }
+.gstats { display: grid; gap: 4px; }
+.gstats div { display: grid; grid-template-columns: 64px 1fr; align-items: center; font-weight: 800; font-size: 13px; }
+.gstats i { display: flex; gap: 3px; }
+.gstats b { flex: 1; height: 9px; border-radius: 3px; background: #e6d3ad; }
+.gstats b.on { background: var(--orange); }
+@media (min-aspect-ratio: 5/4) {
+  .garage { flex-direction: row; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; }
+  .garage-top { width: auto; }
+  .garage-panel { width: min(520px, 48vw); max-height: calc(100vh - 80px); margin: 52px 0 0 auto; }
+  .garage-body { grid-template-columns: 1fr; overflow-y: auto; }
+  .garage-hint { display: none; }
+}
+@media (max-height: 520px) {
+  .garage-top h2 { font-size: 26px; }
+  .garage-panel { padding: 10px; }
+  .gitem { padding: 6px 4px; }
+  .gicon { width: 30px; height: 30px; font-size: 18px; }
+  .garage-detail h3 { font-size: 20px; }
+}
+/* Garage on short landscape screens (phones on their side): items and details side by side */
+@media (max-height: 520px) and (min-aspect-ratio: 5/4) {
+  .garage-panel { width: min(560px, 62vw); margin-top: 44px; max-height: calc(100vh - 56px); gap: 6px; }
+  .garage-body { grid-template-columns: 1fr 1fr; gap: 10px; overflow: hidden; }
+  .garage-items { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+  .gitem { grid-template-columns: auto 1fr; justify-items: start; text-align: left; padding: 5px 7px; gap: 0 6px; }
+  .gitem .gicon { grid-row: span 2; width: 26px; height: 26px; font-size: 15px; }
+  .gname { font-size: 12px; text-align: left; }
+  .gtag { font-size: 11px; }
+  .garage-detail { gap: 4px; }
+  .garage-detail p { font-size: 12px; }
+  .garage-detail .gfair { display: none; }
+  .gstats div { grid-template-columns: 48px 1fr; font-size: 11px; }
+  .garage-detail .big { font-size: 16px; padding: 8px 14px; }
+  .garage-panel .seg button { padding: 4px 10px; }
+}

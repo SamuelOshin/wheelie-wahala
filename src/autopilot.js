@@ -1,7 +1,7 @@
 // A simple rider used to check courses: full throttle, and in the air it levels the bike
 // to the slope it's about to land on. If it can finish, a person can.
 import { buildTrack } from './track.js';
-import { BikeSim } from './physics.js';
+import { BikeSim, TUNING } from './physics.js';
 
 const norm = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
@@ -32,9 +32,9 @@ export function autopilotInput(sim) {
 }
 
 // Ride a level. Returns { finished, time, crashes } (time in seconds of game time).
-export function rideCourse(level, { maxTime = 90, maxCrashes = 0 } = {}) {
+export function rideCourse(level, { maxTime = 90, maxCrashes = 0, tuning } = {}) {
   const track = buildTrack(level);
-  const sim = new BikeSim(track);
+  const sim = new BikeSim(track, tuning ?? TUNING);
   sim.reset(track.checkpoints[0]);
   const dt = 1 / 120;
   let t = 0, crashes = 0, cp = 0;

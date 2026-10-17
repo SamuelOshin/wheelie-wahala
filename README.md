@@ -39,7 +39,11 @@ milestones at 25, 100, 250, 500 and up.
   points as you can; every trick landed at ×3 combo or higher adds 3 seconds.
 - **Ghost**: your fastest run on each level (and today's daily) rides along as a see-through bike.
 - **Coins and missions**: three missions at a time ("Land 10 flips", "Reach a ×3 combo"…). Coins come
-  from runs, missions, daily streaks and lifetime-flip milestones (the Garage to spend them is next).
+  from runs, missions, daily streaks and lifetime-flip milestones.
+- **Garage**: a spotlit 3D showroom. Buy and equip five bikes (Dirt, Trials, Sport, Stunt, Chopper),
+  eight paints and seven trails (Smoke, Sparks, Confetti, Green-White-Green, Fire, Rainbow). Bikes feel
+  different (grip, spin speed, weight, wheelbase) but are tuned to the same pace:
+  `node tools/bike-check.mjs` rides all 30 levels on each bike and compares total times.
 
 ## Settings
 

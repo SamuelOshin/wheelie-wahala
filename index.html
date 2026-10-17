@@ -86,6 +86,7 @@
     </div>
     <div id="worlds" class="worlds"></div>
     <div class="menu-row">
+      <button id="btn-garage" class="pill">🏍️ Garage</button>
       <button id="btn-missions" class="pill">🎯 Missions <span class="badge" id="missions-badge" hidden></span></button>
       <button id="btn-board" class="pill">🏆 Leaderboard</button>
       <button id="btn-settings" class="pill">⚙️ Settings</button>
@@ -156,6 +157,24 @@
       </table>
       <p id="board-note"></p>
       <button id="btn-board-close" class="pill">Close</button>
+    </div>
+  </section>
+
+  <!-- Garage -->
+  <section id="garage" class="screen garage" hidden>
+    <div class="garage-top">
+      <button id="btn-garage-back" class="pill">‹ Back</button>
+      <h2>Garage</h2>
+      <span class="garage-hint">Drag to spin</span>
+    </div>
+    <div class="panel garage-panel">
+      <div class="seg" id="garage-tabs">
+        <button data-t="bikes" class="on">Bikes</button><button data-t="paints">Paint</button><button data-t="trails">Trails</button>
+      </div>
+      <div class="garage-body">
+        <div id="garage-items" class="garage-items"></div>
+        <div id="garage-detail" class="garage-detail"></div>
+      </div>
     </div>
   </section>
 
