@@ -133,9 +133,11 @@ const DESIGNS = {
 };
 
 export class BikeModel {
-  // look: { bike, paint } from the Garage. options.ghost: a see-through copy for your best run.
-  constructor(style, { ghost = false, look = { bike: 'dirt', paint: 'red' } } = {}) {
+  // look: { bike, paint } from the Garage. options.ghost: a see-through copy (best run, friend,
+  // live rider). options.tint: wash a ghost in one colour, so your own ghost reads as a ghost.
+  constructor(style, { ghost = false, tint = null, look = { bike: 'dirt', paint: 'red' } } = {}) {
     this.isGhost = ghost;
+    this.tint = tint && new THREE.Color(tint);
     this.root = new THREE.Group(); // added to the scene
     this.chassis = new THREE.Group();
     this.root.add(this.chassis);
@@ -204,7 +206,11 @@ export class BikeModel {
       o.castShadow = false;
       if (!o.material.userData.ghost) {
         o.material = o.material.clone();
-        Object.assign(o.material, { transparent: true, opacity: 0.32, depthWrite: false });
+        Object.assign(o.material, { transparent: true, opacity: this.tint ? 0.42 : 0.32, depthWrite: false });
+        if (this.tint) {
+          o.material.color.lerp(this.tint, 0.65);
+          if (o.material.emissive) o.material.emissive.copy(this.tint).multiplyScalar(0.35);
+        }
         o.material.userData.ghost = true;
       }
     });

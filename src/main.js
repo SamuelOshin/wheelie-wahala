@@ -200,7 +200,7 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) refr
 const world = new World($('game'));
 const look = () => ({ bike: progress.garage.bike, paint: progress.garage.paint });
 const bike = new BikeModel(player.style, { look: look() });
-const ghostBike = new BikeModel(player.style, { ghost: true, look: look() });
+const ghostBike = new BikeModel(player.style, { ghost: true, tint: '#5fdcff', look: look() });
 ghostBike.root.position.z = -0.8; // a lane behind you, so it still shows when you're level
 world.scene.add(bike.root, ghostBike.root);
 const particles = new Particles(world.scene);
@@ -239,6 +239,8 @@ function loadCourse(course, courseMode) {
     saved: tricks.snapshot(), crashes: 0, timeLeft: FRENZY_TIME, bonusTime: 0,
   };
   ghost = (mode === 'level' || mode === 'daily') && settings.ghost ? loadGhost(level.id) : null;
+  ghostCursor = 0;
+  coachTimer = 0;
   ghostBike.root.visible = false;
   friend = challenge && challenge.courseId === level.id ? challenge : null;
   if (friend) {
@@ -772,6 +774,16 @@ function finishRun() {
     }
   }
 
+  // Your own ghost: how did you do against it, or tell first-timers it now exists.
+  let ghostLine = '';
+  if ((mode === 'level' || mode === 'daily') && settings.ghost && !friend) {
+    if (ghost) {
+      const d = time - ghost.time;
+      ghostLine = d < 0 ? `👻 You beat your ghost by ${(-d).toFixed(2)} s! This run is your new ghost.` : `👻 Your ghost wins by ${d.toFixed(2)} s. Try again?`;
+    } else {
+      ghostLine = '👻 This run is saved as your ghost. Race it next time!';
+    }
+  }
   // Racing a friend's ghost: who won?
   if (friend && mode !== 'frenzy') {
     const d = time - friend.time;
@@ -802,6 +814,8 @@ function finishRun() {
   $('res-perfect').textContent = tricks.perfects;
   $('res-lifetime').textContent = `↻ ${num(progress.flips)} lifetime flips`;
   $('res-note').textContent = note;
+  $('res-ghost').textContent = ghostLine;
+  $('res-ghost').hidden = !ghostLine;
   $('res-coins').textContent = `+${num(coins)}`;
   $('res-coins').append(coinIcon());
   $('res-streak').hidden = !streakText;
@@ -1417,10 +1431,76 @@ function updateOverlays() {
 }
 
 // The see-through bike replays your best run on this course, in step with your clock.
+// Where your ghost was when it reached x: its time there, for the live gap. Walks forward through
+// the samples as you ride (loops send x backwards for a moment; the gap just holds still).
+let ghostCursor = 0, coachTimer = 0, gapShownAt = 0;
+function ghostTimeAt(x) {
+  const s = ghost.s, n = s.length / 4;
+  while (ghostCursor < n - 1 && s[(ghostCursor + 1) * 4 + 1] <= x) ghostCursor++;
+  if (ghostCursor >= n - 1 || s[ghostCursor * 4 + 1] > x) return null;
+  const a = ghostCursor * 4, b = a + 4;
+  const k = (x - s[a + 1]) / ((s[b + 1] - s[a + 1]) || 1);
+  return s[a] + (s[b] - s[a]) * Math.max(0, Math.min(1, k));
+}
+
 function updateGhost() {
   const pose = ghost && settings.ghost && state === 'playing' ? ghostPose(ghost, run.time) : null;
   ghostBike.root.visible = !!pose;
   if (pose) ghostBike.update(ghostBike.poseFromChassis(pose.x, pose.y, pose.angle));
+  // 1. Name it: a cyan tag above it.
+  if (pose) setTag('mine', `👻 Your best · ${fmt(ghost.time)}`, pose.x, pose.y + 1.9, -0.8, 'mine');
+  else setTag('mine', null);
+
+  // 2. The gap: how far ahead (green) or behind (red) your ghost you are, right now.
+  const gapEl = $('hud-gap');
+  const me = sim.chassis.getPosition();
+  const tg = pose && run.started ? ghostTimeAt(me.x) : null;
+  gapEl.hidden = tg === null;
+  if (tg !== null && clock - gapShownAt > 0.12) {
+    gapShownAt = clock;
+    const d = run.time - tg;
+    gapEl.textContent = `${d < 0 ? '−' : '+'}${Math.abs(d).toFixed(2)} s 👻`;
+    gapEl.className = `hud-gap ${d < 0 ? 'ahead' : 'behind'}`;
+  }
+
+  // 3. Off the screen: an arrow at the edge saying where it is.
+  const edge = $('ghost-edge');
+  let off = false;
+  if (pose && run.started) {
+    tmp.set(pose.x, pose.y + 0.8, -0.8).project(world.camera);
+    const sx = (tmp.x * 0.5 + 0.5) * innerWidth, sy = (-tmp.y * 0.5 + 0.5) * innerHeight;
+    off = sx < 0 || sx > innerWidth;
+    if (off) {
+      const ahead = pose.x > me.x;
+      const m = Math.round(Math.abs(pose.x - me.x));
+      edge.textContent = ahead ? `👻 ${m} m ahead ▶` : `◀ 👻 ${m} m behind`;
+      const y = Math.max(90, Math.min(innerHeight - 140, sy));
+      const x = ahead ? innerWidth - edge.offsetWidth - 12 : 12;
+      edge.style.transform = `translate(${x}px, ${y}px)`;
+    }
+  }
+  edge.hidden = !off;
+
+  // 4. Once ever: point at it the first time it rides with you.
+  // It counts as seen the moment it appears; it stays up for 4 s of this run.
+  const coach = $('coach');
+  if (pose && run.started && !off && coachTimer === 0) {
+    let seen = true;
+    try { seen = !!localStorage.getItem('wheelie-wahala-ghost-intro'); } catch {}
+    if (!seen) {
+      coachTimer = 0.001;
+      try { localStorage.setItem('wheelie-wahala-ghost-intro', '1'); } catch {}
+    }
+  }
+  if (pose && !off && coachTimer > 0 && coachTimer < 4) {
+    coachTimer += 1 / 60;
+    tmp.set(pose.x, pose.y + 2.6, -0.8).project(world.camera);
+    const sx = (tmp.x * 0.5 + 0.5) * innerWidth, sy = (-tmp.y * 0.5 + 0.5) * innerHeight;
+    coach.hidden = false;
+    coach.style.transform = `translate(${sx - coach.offsetWidth / 2}px, ${sy - coach.offsetHeight - 10}px)`;
+  } else {
+    coach.hidden = true;
+  }
   // A friend's ghost always shows (that's the point of the link).
   const fp = friend && (state === 'playing' || state === 'finished') ? ghostPose(friend.ghost, run.time) : null;
   friendBike.root.visible = !!fp;
@@ -1432,7 +1512,20 @@ function updateGhost() {
 
 function pause() {
   if (state === 'playing') setState('paused');
+  renderGhostButton();
 }
+
+// Pause → 👻 Ghost: on/off (also in Settings).
+function renderGhostButton() {
+  $('btn-ghost-p').textContent = `👻 Ghost: ${settings.ghost ? 'on' : 'off'}`;
+}
+$('btn-ghost-p').onclick = () => {
+  sfx.click();
+  updateSetting('ghost', !settings.ghost);
+  ghost = settings.ghost && (mode === 'level' || mode === 'daily') ? loadGhost(level.id) : null;
+  ghostCursor = 0;
+  renderGhostButton();
+};
 
 function goMenu() {
   race = null;

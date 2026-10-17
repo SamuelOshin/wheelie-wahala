@@ -37,7 +37,10 @@ milestones at 25, 100, 250, 500 and up.
   date and checked by an autopilot before you see it. Finish it on consecutive days to build a 🔥 streak.
 - **Flip Frenzy**: 60 seconds on a long generated course full of kickers. Score as many flip
   points as you can; every trick landed at ×3 combo or higher adds 3 seconds.
-- **Ghost**: your fastest run on each level (and today's daily) rides along as a see-through bike.
+- **Ghost**: your fastest run on each level (and today's daily) rides along as a cyan see-through bike
+  tagged "👻 Your best". The gap under the timer shows how far ahead (green) or behind (red) you are,
+  an arrow at the screen edge shows where it is when it's off screen, a one-time coach mark points it
+  out, and the results say whether you beat it. Toggle it on the pause screen or in Settings.
 - **Coins and missions**: three missions at a time ("Land 10 flips", "Reach a ×3 combo"…). Coins come
   from runs, missions, daily streaks and lifetime-flip milestones.
 - **Garage**: a spotlit 3D showroom. Buy and equip five bikes (Dirt, Trials, Sport, Stunt, Chopper),

@@ -374,3 +374,15 @@ body.playing .corner .fs-btn { display: none; }
   #finish .menu-row .big { padding: 7px 16px; font-size: 17px; }
   #finish .res-extra { font-size: 17px; }
 }
+
+/* Your ghost: cyan, labelled, with a live gap and an arrow when it's off screen */
+#tags .tag.mine { background: rgba(0, 170, 210, .88); }
+.hud-gap { display: inline-block; font: 16px var(--display); margin-top: 3px; padding: 2px 10px; border-radius: 999px; background: rgba(20, 24, 40, .6); text-shadow: none; }
+.hud-gap.ahead { color: #b6ff8a; }
+.hud-gap.behind { color: #ffb3b3; }
+.ghost-edge { position: fixed; left: 0; top: 0; padding: 4px 10px; border-radius: 999px; background: rgba(0, 170, 210, .9); color: #fff; font: 14px var(--display); white-space: nowrap; pointer-events: none; will-change: transform; z-index: 4; }
+.coach { position: fixed; left: 0; top: 0; padding: 8px 14px; border-radius: 14px; background: #fff; color: #00718c; font: 16px/1.25 var(--display); text-align: center; box-shadow: 0 6px 18px rgba(0,0,0,.25); pointer-events: none; will-change: transform; z-index: 9; animation: coach-in .35s ease-out; }
+.coach::after { content: ''; position: absolute; left: 50%; bottom: -8px; margin-left: -8px; border: 8px solid transparent; border-bottom: 0; border-top-color: #fff; }
+.coach b { color: var(--deep); }
+@keyframes coach-in { from { opacity: 0; } }
+.res-ghost { margin: 0; text-align: center; font-weight: 800; color: #00718c; }

@@ -29,6 +29,7 @@
     <div class="hud-center">
       <div id="hud-level"></div>
       <div id="hud-time">0:00.00</div>
+      <div id="hud-gap" class="hud-gap" hidden></div>
     </div>
     <div class="hud-flips" id="hud-flips">
       <div class="flip-count"><span class="flip-icon">↻</span><b id="hud-flipcount">0</b><small id="hud-flipgoal">/ 3</small></div>
@@ -127,6 +128,7 @@
       <h2>Paused</h2>
       <button id="btn-resume" class="big">Resume</button>
       <button id="btn-retry-p" class="pill">Restart level</button>
+      <button id="btn-ghost-p" class="pill">👻 Ghost: on</button>
       <button id="btn-fullscreen-p" class="pill" hidden>⛶ Full screen</button>
       <button id="btn-settings-p" class="pill">⚙️ Settings</button>
       <button id="btn-menu-p" class="pill">🏁 Quit to menu</button>
@@ -150,6 +152,7 @@
         </div>
         <div class="res-col">
           <p id="res-note"></p>
+          <p id="res-ghost" class="res-ghost" hidden></p>
           <div class="menu-row">
             <button id="btn-share" class="pill">📤 Share</button>
             <button id="btn-retry" class="pill">↻ Retry</button>
@@ -248,6 +251,10 @@
   </div>
   <div id="countdown" hidden></div>
   <div id="tags"></div>
+  <!-- Your ghost when it's off the screen: which way, and how far -->
+  <div id="ghost-edge" class="ghost-edge" hidden></div>
+  <!-- Shown once, the first time your ghost rides with you -->
+  <div id="coach" class="coach" hidden>That's your best run 👻<br><b>Beat it!</b></div>
 
   <!-- Missions -->
   <section id="missions" class="screen dim" hidden>
@@ -355,7 +362,7 @@
   <script type="module">
     // The built game. Add ?src to the address to run the unbundled source instead (for development).
     if (new URLSearchParams(location.search).has('src')) import('./src/main.js');
-    else import('./build/game-LEVX36OD.js');
+    else import('./build/game-MOFUAVWC.js');
   </script>
   <!-- game:end -->
 </body>
