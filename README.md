@@ -26,6 +26,23 @@ one run. Crash by landing on your head and you go back to the last checkpoint, a
 count from when you got there. Every flip you ever land adds to your **lifetime flips**, with
 milestones at 25, 100, 250, 500 and up.
 
+## Difficulty
+
+Pick it in ⚙️ Settings, or tap the difficulty button on the menu to step through them. It applies
+from your next ride. The goals (target time, flip goal) are the same on every difficulty; what changes
+is how forgiving the bike is:
+
+| | Landings | Checkpoints | Flip score | Coins |
+| --- | --- | --- | --- | --- |
+| 🙂 **Easy** (beginner friendly) | any landing on your wheels is safe, and the bike levels itself in the air and won't wheelie over | all | ×0.5 | ×1 |
+| 😎 **Normal** | land within 50° of the track or you crash | all | ×1 | ×1 |
+| 😤 **Hard** | within 40° | every other one | ×1.5 | ×1.5 |
+| 😈 **Extreme** | within 30° | none: crash once and the run starts again | ×2 | ×2 |
+
+A crash from a bad landing says **BAD LANDING!** The results show the difficulty you rode, and a level
+you've finished on Hard or Extreme gets a 😤 / 😈 badge. Flip scores on the leaderboard include the
+multiplier, so harder rides score more.
+
 ## Modes
 
 - **Three worlds, 30 levels**: Desert Canyon, Lagos City (opens at 12 ★: the Third Mainland Bridge,
@@ -33,6 +50,11 @@ milestones at 25, 100, 250, 500 and up.
   Three stars per level.
 - **Track pieces**: kickers, drops, loops, **boost pads** (fire you forward), **see-saws** (tip as you
   ride over; hit one fast and it throws you) and **crates** to smash for points.
+- **The levels get hard.** The first three of each world teach; from level 4 they add **ledges to jump
+  up onto**, **steep walls** (lean forward or flip over backwards), **staircases** of drop-offs,
+  **platforms over pits**, long **canyon jumps** onto flat ground, **mega kickers** with room for a
+  double or triple, and rough **whoops**. Target times are the autopilot's time plus 8%, and the flip
+  goal is about 85% of the flips there's air for.
 - **Daily Challenge**: a new course every day (UTC) in one of the three worlds, the same for everyone. It's generated from the
   date and checked by an autopilot before you see it. Finish it on consecutive days to build a 🔥 streak.
 - **Flip Frenzy**: 60 seconds on a long generated course full of kickers. Score as many flip
@@ -144,7 +166,9 @@ the autopilot check (it marks crash spots) and test ride it in the game. "Copy a
 level as JSON.
 
 `node tools/level-check.mjs` rides all 30 levels with the autopilot and suggests target times and flip
-goals. `node tools/gen-check.mjs 40` rides 40 generated Daily and Frenzy courses with the autopilot and lists
+goals. Add `--diff=hard` (or `easy`, `extreme`) to ride with that difficulty's landing rules and
+checkpoints, and `--raw` for a beginner who never leans (try `--diff=easy --raw`). Every level rides
+cleanly on all four difficulties. `node tools/bike-check.mjs --why` lists where each bike crashes. `node tools/gen-check.mjs 40` rides 40 generated Daily and Frenzy courses with the autopilot and lists
 any it can't finish cleanly.
 
 `node tools/sim.mjs desert-2` rides a level headlessly with a scripted rider (add `--raw` for a rider

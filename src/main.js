@@ -14,6 +14,7 @@ import { setupInput, readInput, anyInput, isTouch, setTouchMode, pollGamepad } f
 import { defaultGarage, tuningFor } from './garage.js';
 import { unlockAudio, setEngine, sfx, toggleMute, isMuted, setMusicLevel, setVolumes, suspendAudio } from './audio.js';
 import { loadSettings, saveSettings, sanitize, cleanName } from './settings.js';
+import { DIFFICULTIES, DIFFICULTY_ORDER, difficultyOf, keepCheckpoints } from './difficulty.js';
 import * as THREE from '../vendor/three.module.js';
 import * as startng from './startng.js';
 import { encodeRace, decodeRace, drawCard, shareCard } from './share.js';
@@ -218,6 +219,7 @@ let levelIndex = 0;
 let level, track, sim;
 let run; // the current attempt
 let ghost = null, recorder = null;
+let diff = DIFFICULTIES.normal; // the current ride's difficulty
 const tricks = new FlipTracker();
 let acc = 0, last = performance.now(), clock = 0, slowmo = 0;
 
@@ -226,7 +228,12 @@ function loadCourse(course, courseMode) {
   mode = courseMode;
   level = course;
   track = buildTrack(level);
+  // The difficulty, fixed for the whole ride: landing rules, checkpoints and flip score.
+  // Frenzy keeps every checkpoint (its clock is already the cost of a crash).
+  diff = difficultyOf(settings.difficulty);
+  if (mode !== 'frenzy') track.checkpoints = keepCheckpoints(track.checkpoints, diff);
   sim = new BikeSim(track, tuningFor(progress.garage.bike)); // your bike's feel
+  sim.rules = diff;
   world.buildLevel(level, track);
   world.attachDynamics(sim);
   world.scene.add(bike.root, ghostBike.root, friendBike.root);
@@ -234,6 +241,7 @@ function loadCourse(course, courseMode) {
   sim.reset(track.checkpoints[0]);
   bike.resetRider();
   tricks.reset();
+  tricks.scale = diff.score;
   run = {
     started: false, time: 0, checkpoint: 0, crashTimer: 0, finished: false, goalShown: false,
     saved: tricks.snapshot(), crashes: 0, timeLeft: FRENZY_TIME, bonusTime: 0,
@@ -263,7 +271,7 @@ function beginRun(name) {
   if (settings.autoFullscreen && isTouch()) enterFullscreen().then(renderFullscreen);
   maybeShowIOSTip();
   setState('playing');
-  $('hud-level').textContent = name;
+  $('hud-level').textContent = diff.id === 'normal' ? name : `${name} · ${diff.icon} ${diff.name}`;
   showHint(level.hint, 5);
   updateHud(true);
 }
@@ -333,6 +341,16 @@ function respawn() {
   // Flips go back to the checkpoint (no farming the same jump for stars).
   // In Frenzy the clock is already the cost, so you keep them.
   if (mode !== 'frenzy') tricks.restore(run.saved);
+  if (diff.checkpoints === 'none' && mode !== 'frenzy' && !run.race) {
+    // Extreme: one life. The run starts again from scratch (in a live race the clock keeps going).
+    tricks.reset();
+    run.saved = tricks.snapshot();
+    run.time = 0;
+    run.started = false;
+    ghostCursor = 0;
+    if (recorder) recorder = new GhostRecorder();
+    popup([['BACK TO THE START'], ['😈 Extreme: no checkpoints', 'pts']], 'bad');
+  }
   run.goalShown = tricks.flips >= level.flipGoal;
   sim.reset(track.checkpoints[run.checkpoint]);
   bike.resetRider();
@@ -565,6 +583,13 @@ function renderLevels(w) {
     const stars = [1, 2, 3].map((s) => `<span class="${n >= s ? 'on' : ''}">★</span>`).join('');
     b.innerHTML = `<div class="num">${k + 1}</div><div class="name"></div><div class="lstars">${stars}</div><div class="best"></div>`;
     b.querySelector('.name').textContent = l.name;
+    if (best?.hardest === 'hard' || best?.hardest === 'extreme') {
+      const badge = document.createElement('div');
+      badge.className = 'ldiff';
+      badge.textContent = DIFFICULTIES[best.hardest].icon;
+      badge.title = `Finished on ${DIFFICULTIES[best.hardest].name}`;
+      b.append(badge);
+    }
     b.querySelector('.best').textContent = best ? `${fmt(best.time)} · ↻ ${best.flips}` : unlocked(i) ? 'New!' : '🔒';
     b.onclick = () => {
       if (!unlocked(i)) return;
@@ -631,7 +656,7 @@ function onTrick(e) {
   saveProgress();
 }
 
-function crash() {
+function crash(e) {
   if (run.crashTimer) return;
   sim.crashed = true;
   run.crashTimer = 1.1;
@@ -643,7 +668,9 @@ function crash() {
   shake(0.6);
   sfx.crash();
   buzz(90);
-  popup(lost.bailed ? [['BAILED!'], ['trick lost', 'pts']] : lost.comboLost ? [['OUCH!'], ['combo lost', 'pts']] : [['OUCH!']], 'bad');
+  const what = e?.reason === 'landing' ? 'BAD LANDING!' : 'OUCH!';
+  popup(lost.bailed ? [[what], ['trick lost', 'pts']] : lost.comboLost ? [[what], ['combo lost', 'pts']]
+    : e?.reason === 'landing' ? [[what], ['land level with the track', 'pts']] : [[what]], 'bad');
 }
 
 function onTrickEvent(e) {
@@ -725,6 +752,8 @@ function finishRun() {
         score: Math.max(tricks.score, prev?.score ?? 0),
         combo: Math.max(tricks.bestCombo, prev?.combo ?? 0),
         goals: { finish: true, time: got.time || !!had.time, flips: got.flips || !!had.flips },
+        // The hardest difficulty you've finished it on (shown on the level button).
+        hardest: DIFFICULTY_ORDER[Math.max(DIFFICULTY_ORDER.indexOf(prev?.hardest ?? 'easy'), DIFFICULTY_ORDER.indexOf(diff.id))],
       };
       stars = starsOf(progress.levels[level.id]);
       const newStars = ['finish', 'time', 'flips'].filter((k) => got[k] && !had[k]).length;
@@ -799,6 +828,7 @@ function finishRun() {
     ghost: recorder && mode !== 'frenzy' ? { time, s: recorder.samples.slice() } : null,
     daily: level.date ? { variant: level.variant, time: level.time } : undefined,
   };
+  coins = Math.round(coins * diff.coins);
   addCoins(coins);
   saveProgress();
   sfx.finish();
@@ -807,6 +837,7 @@ function finishRun() {
   setState('finished');
 
   $('banner').textContent = banner;
+  $('res-diff').textContent = `${diff.icon} ${diff.name}${diff.score !== 1 ? ` · flips ×${diff.score}` : ''}`;
   $('stars').hidden = mode === 'frenzy';
   $('goals').replaceChildren(...rows);
   $('res-score').textContent = num(tricks.score);
@@ -1322,6 +1353,7 @@ function openSettings() {
   $('set-name').placeholder = startngConnected ? player.name : 'Rider';
   $('set-nametag').checked = settings.nameTag;
   $('set-ghost').checked = settings.ghost;
+  renderDifficulty();
   for (const k of ['reduceMotion', 'leftHanded', 'bigButtons', 'autoFullscreen']) $(`set-${k}`).checked = settings[k];
   for (const k of ['master', 'music', 'sfx', 'engine']) {
     const input = $(`set-${k}`);
@@ -1339,6 +1371,32 @@ function updateSetting(key, value) {
   saveSettings(settings);
   applySettings();
 }
+
+// Difficulty: Settings and the menu button (which steps through them). It applies from the next ride.
+function renderDifficulty() {
+  const d = difficultyOf(settings.difficulty);
+  for (const b of $('set-difficulty').children) b.classList.toggle('on', b.dataset.v === d.id);
+  const midRide = state === 'paused' && d.id !== diff.id;
+  $('set-difficulty-note').textContent = d.blurb + (midRide ? ' (From your next ride.)' : '');
+  const btn = $('btn-diff');
+  btn.textContent = `${d.icon} ${d.name}`;
+  btn.className = `pill diff d-${d.id}`;
+  btn.title = `Difficulty: ${d.name}. ${d.blurb} Tap to change.`;
+}
+function setDifficulty(id) {
+  updateSetting('difficulty', id);
+  renderDifficulty();
+}
+for (const b of $('set-difficulty').children) {
+  b.onclick = () => { sfx.click(); setDifficulty(b.dataset.v); };
+}
+$('btn-diff').onclick = () => {
+  sfx.click();
+  const next = DIFFICULTY_ORDER[(DIFFICULTY_ORDER.indexOf(settings.difficulty) + 1) % DIFFICULTY_ORDER.length];
+  setDifficulty(next);
+  const d = difficultyOf(next);
+  popup([[`${d.icon} ${d.name.toUpperCase()}`], [d.blurb, 'pts']], d.id === 'extreme' ? 'bad' : 'small');
+};
 
 $('btn-settings').onclick = openSettings;
 $('btn-settings-p').onclick = openSettings;
@@ -1575,7 +1633,7 @@ document.addEventListener('visibilitychange', () => {
 function physicsStep(input) {
   for (const e of sim.step(input, STEP)) {
     if (e.type === 'land') onLand(e);
-    else if (e.type === 'crash') crash();
+    else if (e.type === 'crash') crash(e);
     else if (e.type === 'boost') onBoost();
     else if (e.type === 'smash') onSmash(e);
   }
@@ -1721,6 +1779,7 @@ function frame(dt) {
 }
 
 applySettings();
+renderDifficulty();
 loadLevel(0);
 setState('menu');
 readRaceLink();

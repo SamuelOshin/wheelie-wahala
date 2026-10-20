@@ -386,3 +386,13 @@ body.playing .corner .fs-btn { display: none; }
 .coach b { color: var(--deep); }
 @keyframes coach-in { from { opacity: 0; } }
 .res-ghost { margin: 0; text-align: center; font-weight: 800; color: #00718c; }
+
+/* Difficulty: the menu button, the tag on the results and the HUD, and the badge on a level */
+.pill.diff { background: #2b2f3a; color: #fff; }
+.pill.diff.d-easy { background: #2e9e5b; }
+.pill.diff.d-hard { background: #d35400; }
+.pill.diff.d-extreme { background: #8e1b1b; box-shadow: 0 3px 0 #4a0c0c, 0 0 14px rgba(255, 60, 60, .45); }
+.diff-tag { font: 16px var(--display); color: #fff; text-shadow: 0 2px 0 var(--deep); margin-top: -4px; }
+.diff-seg button { padding: 7px 10px; }
+.level .ldiff { position: absolute; top: 4px; right: 6px; font-size: 15px; }
+.level { position: relative; }

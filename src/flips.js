@@ -25,6 +25,7 @@ export function trickName(n, back) {
 
 export class FlipTracker {
   constructor() {
+    this.scale = 1; // the difficulty's multiplier: ×0.5 on Easy up to ×2 on Extreme
     this.reset();
   }
 
@@ -79,7 +80,7 @@ export class FlipTracker {
     this.sinceTrick = 0;
     this.bestCombo = Math.max(this.bestCombo, this.combo);
     if (p.perfect) this.perfects++;
-    const points = Math.round(trickPoints(p.flips) * this.multiplier * (p.perfect ? PERFECT_BONUS : 1)) + p.airPoints;
+    const points = Math.round((trickPoints(p.flips) * this.multiplier * (p.perfect ? PERFECT_BONUS : 1) + p.airPoints) * this.scale);
     this.flips += p.flips;
     this.score += points;
     return {

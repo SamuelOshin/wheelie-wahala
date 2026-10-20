@@ -28,6 +28,7 @@ export const TUNING = {
   airResponse: 7, // how quickly the spin follows your lean
   airDamping: 4,
   groundDamping: 3,
+  edgeDamping: 14, // nose-down spin held back while only the back wheel touches
   head: [0.02, 1.14, 0.22], // rider head in chassis space: x, y, radius
   torso: [-0.18, 0.6, 0.2],
   windowBack: 6, // the bike only touches track within this distance of its progress
@@ -37,12 +38,19 @@ export const TUNING = {
   seesawRise: 1.6, // how far the high end of a see-saw sits above the track
 };
 
+// Riding rules from the difficulty (difficulty.js): landLimit is how far off the track's
+// angle you may land without crashing; assist levels the bike in the air when you aren't leaning.
+const DEFAULT_RULES = { landLimit: Infinity, assist: false };
+const norm = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+
 const CAT_TRACK = 0x1, CAT_WHEEL = 0x2, CAT_BODY = 0x4, CAT_CRATE = 0x8;
 
 export class BikeSim {
   constructor(track, tuning = TUNING) {
     this.track = track;
     this.t = tuning;
+    this.rules = DEFAULT_RULES;
+    this.assistSlope = 0;
     this.world = new planck.World({ gravity: Vec2(0, tuning.gravity) });
     this.progress = 0; // distance along the course (s) the bike is at
     this.dynamics = []; // see-saw planks and crates, for drawing: { kind, body, hw, hh }
@@ -257,12 +265,29 @@ export class BikeSim {
         if (input.lean) {
           const target = input.lean * t.airSpin;
           this.chassis.setAngularVelocity(w + (target - w) * Math.min(1, t.airResponse * dt));
+        } else if (this.rules.assist) {
+          // Easy: hands off, the bike turns itself level with where it will land.
+          if ((this.assistTimer = (this.assistTimer ?? 0) - dt) <= 0) {
+            this.assistTimer = 0.1;
+            this.assistSlope = this.landingSlope();
+          }
+          const err = norm(this.chassis.getAngle() - this.assistSlope);
+          const target = Math.max(-4, Math.min(4, -err * 5));
+          this.chassis.setAngularVelocity(w + (target - w) * Math.min(1, 6 * dt));
         } else {
           // Hands off: the spin dies away slowly, so small hops don't end in a crash.
           this.chassis.setAngularVelocity(w * Math.exp(-t.airDamping * dt));
         }
+      } else if (this.rearGround && !this.frontGround && w < 0 && input.lean >= 0 && this.noseDown()) {
+        // Riding off an edge: the back spring would pitch the nose down hard as the front
+        // wheel leaves, so the rider holds it (unless you're leaning forward on purpose).
+        if (input.lean) this.chassis.applyTorque(input.lean * t.groundLeanTorque, true);
+        this.chassis.setAngularVelocity(w * Math.exp(-t.edgeDamping * dt));
       } else if (input.lean) {
         this.chassis.applyTorque(input.lean * t.groundLeanTorque, true);
+      } else if (this.rules.assist && this.contactSeg && this.pitch() > 0.5) {
+        // Easy: hands off, a big wheelie is pushed back down before it flips you over.
+        this.chassis.applyTorque(-t.groundLeanTorque, true);
       } else {
         this.chassis.setAngularVelocity(w * Math.exp(-t.groundDamping * dt));
       }
@@ -304,13 +329,22 @@ export class BikeSim {
         let off = angle - slope;
         off = Math.abs(Math.atan2(Math.sin(off), Math.cos(off)));
         const flips = Math.floor((Math.abs(this.airSpin) + 0.7) / (Math.PI * 2));
+        const impact = Math.abs(vx * g.nx + vy * g.ny); // speed into the track
+        if (off > this.rules.landLimit && impact > 4) {
+          // Came down too far off the track's angle: a bad landing.
+          this.crashed = true;
+          this.airTime = this.airSpin = 0;
+          events.push({ type: 'crash', reason: 'landing', off });
+          return events;
+        }
         events.push({
           type: 'land',
           air: this.airTime,
           flips,
           back: this.airSpin > 0,
           perfect: off < (12 * Math.PI) / 180,
-          impact: Math.abs(vx * g.nx + vy * g.ny), // speed into the track
+          off,
+          impact,
         });
       }
       this.airTime = 0;
@@ -354,6 +388,40 @@ export class BikeSim {
       events.push({ type: 'crash' });
     }
     return events;
+  }
+
+  // Is the bike level with, or pointing below, the track it's on? (Not in a wheelie.)
+  noseDown() {
+    return !!this.contactSeg && this.pitch() < 0.1;
+  }
+
+  // The bike's angle to the track it last touched (+ = nose up).
+  pitch() {
+    const g = this.contactSeg;
+    return norm(this.chassis.getAngle() - Math.atan2(g.by - g.ay, g.bx - g.ax));
+  }
+
+  // Where the bike will come down: follow its flight until it meets the track, and return
+  // the track's angle there. Used by Easy's air assist and the autopilot.
+  landingSlope() {
+    const segs = this.track.segments;
+    const c = this.chassis.getPosition(), v = this.chassis.getLinearVelocity();
+    const start = segmentIndexAt(this.track, this.progress - 2);
+    const h = 0.015;
+    let x = c.x, y = c.y - 0.8, vy = v.y;
+    for (let k = 0; k < 200; k++) {
+      x += v.x * h;
+      vy += this.t.gravity * h;
+      y += vy * h;
+      for (let i = start; i < segs.length && segs[i].s0 < this.progress + 120; i++) {
+        const g = segs[i];
+        if (g.bx > g.ax && x >= g.ax && x <= g.bx) {
+          if (y <= g.ay + (g.by - g.ay) * ((x - g.ax) / (g.bx - g.ax))) return Math.atan2(g.by - g.ay, g.bx - g.ax);
+          break;
+        }
+      }
+    }
+    return 0;
   }
 
   // In the air, keep progress on the track below the bike (first match ahead).

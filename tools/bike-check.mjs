@@ -15,6 +15,7 @@ for (const bike of BIKES) {
     total += r.time;
     crashes += r.crashes;
     if (!r.finished) stuck.push(level.id);
+    if (r.crashes && process.argv.includes('--why')) console.log(`  ${bike.id} ${level.id} crashes at x=${r.where?.join(', ')}`);
   }
   base ??= total;
   const pace = ((total / base - 1) * 100).toFixed(1);

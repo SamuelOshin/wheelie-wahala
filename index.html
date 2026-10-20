@@ -98,6 +98,7 @@
     <div id="worlds" class="worlds"></div>
     <div class="menu-row">
       <button id="btn-race" class="pill race" hidden>🏁 Live race</button>
+      <button id="btn-diff" class="pill diff" title="Difficulty (tap to change)">😎 Normal</button>
       <button id="btn-garage" class="pill">🏍️ Garage</button>
       <button id="btn-missions" class="pill">🎯 Missions <span class="badge" id="missions-badge" hidden></span></button>
       <button id="btn-board" class="pill">🏆 Leaderboard</button>
@@ -138,6 +139,7 @@
   <!-- Stage clear -->
   <section id="finish" class="screen" hidden>
     <div class="banner" id="banner">STAGE CLEAR!</div>
+    <div class="diff-tag" id="res-diff"></div>
     <div class="panel card">
       <div class="res-cols">
         <div class="res-col">
@@ -273,6 +275,16 @@
       <h2>Settings</h2>
 
       <fieldset>
+        <legend>Difficulty</legend>
+        <div class="row">
+          <div class="seg diff-seg" id="set-difficulty">
+            <button data-v="easy">🙂 Easy</button><button data-v="normal">😎 Normal</button><button data-v="hard">😤 Hard</button><button data-v="extreme">😈 Extreme</button>
+          </div>
+        </div>
+        <p class="note" id="set-difficulty-note"></p>
+      </fieldset>
+
+      <fieldset>
         <legend>Rider</legend>
         <label class="row">
           <span>Rider name</span>
@@ -362,7 +374,7 @@
   <script type="module">
     // The built game. Add ?src to the address to run the unbundled source instead (for development).
     if (new URLSearchParams(location.search).has('src')) import('./src/main.js');
-    else import('./build/game-MOFUAVWC.js');
+    else import('./build/game-RBJMXLBF.js');
   </script>
   <!-- game:end -->
 </body>

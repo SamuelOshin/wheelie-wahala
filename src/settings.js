@@ -5,6 +5,7 @@ export const DEFAULTS = {
   riderName: '', // empty = use the start.ng character name
   nameTag: true,
   ghost: true, // race your best run
+  difficulty: 'normal', // easy | normal | hard | extreme (difficulty.js)
   master: 100,
   music: 70,
   sfx: 80,
@@ -43,6 +44,7 @@ export function sanitize(s) {
     riderName: cleanName(s.riderName),
     nameTag: s.nameTag !== false,
     ghost: s.ghost !== false,
+    difficulty: ['easy', 'normal', 'hard', 'extreme'].includes(s.difficulty) ? s.difficulty : DEFAULTS.difficulty,
     master: clamp(s.master),
     music: clamp(s.music),
     sfx: clamp(s.sfx),

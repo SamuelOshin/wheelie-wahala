@@ -3,7 +3,7 @@
 //  - the page itself is fetched fresh when online (so updates arrive), from the cache when not
 //  - built files have hashed names, so cached copies never go stale
 //  - start.ng sign-in, scores and the leaderboard always go to the network
-const VERSION = 'ce94fcfda0';
+const VERSION = '688fad3a99';
 const CACHE = `wheelie-wahala-${VERSION}`;
 const FILES = [
   "./",
@@ -15,15 +15,16 @@ const FILES = [
   "icons/icon-192.png",
   "icons/icon-512.png",
   "icons/icon-180.png",
-  "build/game-MOFUAVWC.js",
+  "build/game-RBJMXLBF.js",
   "build/chunk-W6LMEICH.js",
   "build/chunk-7UZAMNOS.js",
-  "build/chunk-B5474AYL.js",
-  "build/chunk-HW5ITHDB.js",
-  "build/chunk-JX6PREYL.js",
-  "build/chunk-2YDOLBFA.js",
-  "build/chunk-S7R7OHGM.js",
-  "build/chunk-5CXGMDMZ.js",
+  "build/chunk-QH2VJFZX.js",
+  "build/chunk-OV44LAWA.js",
+  "build/chunk-FRFRZABT.js",
+  "build/chunk-D2TT6VOT.js",
+  "build/chunk-AOGY7YMY.js",
+  "build/chunk-6HYDHZXP.js",
+  "build/chunk-4LXCC3VP.js",
   "build/chunk-WOT6VMZA.js"
 ];
 
