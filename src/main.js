@@ -1028,8 +1028,9 @@ $('btn-x').onclick = async () => {
   const on = d.id === 'normal' ? '' : ` on ${d.icon} ${d.name}`;
   const text = lastRun.mode === 'frenzy'
     ? `I scored ${num(lastRun.score)} in Flip Frenzy${on} with ${lastRun.flips} flips! 🏍️ Wheelie Wahala on start.ng. Can you beat me?`
-    : `I cleared ${lastRun.course} in ${fmt(lastRun.time)} with ${lastRun.flips} flips${on} ${'★'.repeat(lastRun.stars)} 🏍️ Wheelie Wahala on start.ng. ${lastRun.ghost ? 'Race my ghost!' : 'Can you beat me?'}`;
-  const post = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(await resultLink())}`;
+    : `I cleared ${lastRun.course} in ${fmt(lastRun.time)} with ${lastRun.flips} flips${on} ${'★'.repeat(lastRun.stars)} 🏍️ Wheelie Wahala on start.ng. Can you beat me?`;
+  // Just the game's address: a short, clean link in the post (📤 Share carries your ghost).
+  const post = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(location.origin + location.pathname)}`;
   window.open(post, '_blank', 'noopener');
 };
 

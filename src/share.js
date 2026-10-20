@@ -1,9 +1,12 @@
 // Sharing: a picture of your result, and a link that lets a friend race your ghost.
 //
 // Ghost links carry the run in the address after # (never sent to any server):
-//   #race=<header>.<path>
-// header: base64url JSON { v, c: course id, n: name, t: time, st: style, lk: bike look, d: daily info }
-// path:   base64url of deflate-compressed int16 deltas, 10 samples a second: x, y (5 cm), angle (0.01 rad)
+//   #race=<course id>~<data>
+// data: base64url of one deflate-compressed block: a 2-byte length, the header as JSON
+//   { v: 2, c: course id, n: name, t: time, st: style, lk: bike look, d: daily info }
+// and then int16 deltas, 10 samples a second: x, y (5 cm), angle (0.01 rad).
+// The first version (#race=<base64 JSON header>.<path>) still opens. It looked just like a
+// sign-in token (both start "eyJ…"), which worried people, so links no longer use it.
 import { ghostPose } from './ghost.js';
 
 const RATE = 10; // samples per second in a link
@@ -32,22 +35,48 @@ export async function encodeRace({ courseId, name, time, ghost, style, look, dai
     ints[i * 3 + 2] = clamp(a - pa);
     px = x; py = y; pa = a;
   }
-  const raw = new Uint8Array(ints.buffer);
+  const head = textBytes(JSON.stringify({ v: 2, c: courseId, n: name, t: Math.round(time * 100) / 100, st: style, lk: look, d: daily }));
+  const raw = new Uint8Array(2 + head.length + ints.byteLength);
+  raw[0] = head.length >> 8;
+  raw[1] = head.length & 255;
+  raw.set(head, 2);
+  raw.set(new Uint8Array(ints.buffer), 2 + head.length);
   const packed = await squeeze(raw, 'in');
-  const header = { v: 1, c: courseId, n: name, t: Math.round(time * 100) / 100, st: style, lk: look, d: daily, z: packed ? 1 : 0 };
-  return `${b64url(textBytes(JSON.stringify(header)))}.${b64url(packed ?? raw)}`;
+  // "z" marks a compressed block (browsers without CompressionStream send it as it is).
+  return `${courseId}~${packed ? 'z' : 'r'}${b64url(packed ?? raw)}`;
+}
+
+async function decodeV2(text) {
+  const data = text.slice(text.indexOf('~') + 1);
+  let bytes = unb64url(data.slice(1));
+  if (data[0] === 'z') bytes = await squeeze(bytes, 'out');
+  if (!bytes) return null;
+  const len = (bytes[0] << 8) | bytes[1];
+  const header = JSON.parse(new TextDecoder().decode(bytes.subarray(2, 2 + len)));
+  if (header.v !== 2) return null;
+  const body = bytes.slice(2 + len); // a copy, so the int16 view starts on an even byte
+  return { header, ints: new Int16Array(body.buffer, 0, Math.floor(body.length / 2)) };
 }
 
 // Back to { courseId, name, time, style, look, daily, ghost } or null if the link is broken.
 export async function decodeRace(text) {
   try {
-    const [h, data] = text.split('.');
-    const header = JSON.parse(new TextDecoder().decode(unb64url(h)));
-    if (header.v !== 1 || typeof header.c !== 'string' || !(header.t > 0)) return null;
-    let bytes = unb64url(data);
-    if (header.z) bytes = await squeeze(bytes, 'out');
-    if (!bytes) return null;
-    const ints = new Int16Array(bytes.buffer, bytes.byteOffset, Math.floor(bytes.length / 2));
+    let header, ints;
+    if (text.includes('~')) {
+      const v2 = await decodeV2(text);
+      if (!v2) return null;
+      ({ header, ints } = v2);
+    } else {
+      const [h, data] = text.split('.');
+      header = JSON.parse(new TextDecoder().decode(unb64url(h)));
+      if (header.v !== 1) return null;
+      let bytes = unb64url(data);
+      if (header.z) bytes = await squeeze(bytes, 'out');
+      if (!bytes) return null;
+      bytes = bytes.slice();
+      ints = new Int16Array(bytes.buffer, 0, Math.floor(bytes.length / 2));
+    }
+    if (typeof header.c !== 'string' || !(header.t > 0)) return null;
     const s = [];
     let x = 0, y = 0, a = 0;
     for (let i = 0; i + 2 < ints.length; i += 3) {

@@ -74,8 +74,9 @@ multiplier, so harder rides score more.
 
 - **Share**: the results screen makes a picture of your finish (course, time, flips, stars) and shares
   it with the phone's share sheet. On computers it saves the picture and copies a link.
-- **Race my ghost**: the shared link carries your whole run (about 1 KB, after `#` so it never reaches a
-  server). A friend who opens it races a see-through copy of you, in your start.ng look and your bike,
+- **Race my ghost**: the 📤 Share link carries your whole run (a few hundred characters after
+  `#race=<course>~`, so it never reaches a server, and it holds no sign-in details). **𝕏 Post** links
+  to the game only, so posts stay short. A friend who opens it races a see-through copy of you, in your start.ng look and your bike,
   and sees who won.
 - **Live riders and races** (signed-in players, through start.ng's live room for this game): other
   riders on the same course appear as see-through bikes with name tags. **🏁 Live race** → pick a
