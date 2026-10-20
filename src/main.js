@@ -824,7 +824,7 @@ function finishRun() {
     banner = 'RACE OVER!';
   }
   lastRun = {
-    course: level.name, courseId: level.id, time, flips, score: tricks.score, stars,
+    course: level.name, courseId: level.id, time, flips, score: tricks.score, stars, mode, diff: diff.id,
     ghost: recorder && mode !== 'frenzy' ? { time, s: recorder.samples.slice() } : null,
     daily: level.date ? { variant: level.variant, time: level.time } : undefined,
   };
@@ -856,6 +856,7 @@ function finishRun() {
   $('btn-retry').textContent = mode === 'frenzy' ? '↻ Same course' : '↻ Retry';
   $('btn-menu').textContent = level.id === 'custom-editor' ? '✎ Editor' : 'Levels';
   $('btn-share').hidden = level.id === 'custom-editor';
+  $('btn-x').hidden = level.id === 'custom-editor';
   renderRaceResults();
 
   const starEls = [...$('stars').children];
@@ -1007,6 +1008,31 @@ $('btn-garage').onclick = openGarage;
 $('btn-garage-back').onclick = () => { sfx.click(); closeGarage(); };
 
 // ---------- sharing ----------
+// The link that goes with a shared result: the game, plus your ghost to race when there is one.
+async function resultLink() {
+  let url = location.origin + location.pathname;
+  if (lastRun.ghost) {
+    url += `#race=${await encodeRace({
+      courseId: lastRun.courseId, name: riderName() || player.name || 'A friend', time: lastRun.time, ghost: lastRun.ghost,
+      style: player.style, look: look(), daily: lastRun.daily,
+    })}`;
+  }
+  return url;
+}
+
+// 𝕏 Post: opens a post with your result and the link (start.ng's game standards ask for this).
+$('btn-x').onclick = async () => {
+  if (!lastRun) return;
+  sfx.click();
+  const d = difficultyOf(lastRun.diff);
+  const on = d.id === 'normal' ? '' : ` on ${d.icon} ${d.name}`;
+  const text = lastRun.mode === 'frenzy'
+    ? `I scored ${num(lastRun.score)} in Flip Frenzy${on} with ${lastRun.flips} flips! 🏍️ Wheelie Wahala on start.ng. Can you beat me?`
+    : `I cleared ${lastRun.course} in ${fmt(lastRun.time)} with ${lastRun.flips} flips${on} ${'★'.repeat(lastRun.stars)} 🏍️ Wheelie Wahala on start.ng. ${lastRun.ghost ? 'Race my ghost!' : 'Can you beat me?'}`;
+  const post = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(await resultLink())}`;
+  window.open(post, '_blank', 'noopener');
+};
+
 $('btn-share').onclick = async () => {
   if (!lastRun) return;
   sfx.click();
@@ -1015,13 +1041,7 @@ $('btn-share').onclick = async () => {
     course: lastRun.course, time: fmt(lastRun.time), flips: lastRun.flips, score: num(lastRun.score),
     stars: lastRun.stars, rider: riderName() || player.name, url: location.host,
   });
-  let url = location.origin + location.pathname;
-  if (lastRun.ghost) {
-    url += `#race=${await encodeRace({
-      courseId: lastRun.courseId, name: riderName() || player.name || 'A friend', time: lastRun.time, ghost: lastRun.ghost,
-      style: player.style, look: look(), daily: lastRun.daily,
-    })}`;
-  }
+  const url = await resultLink();
   const text = `I finished ${lastRun.course} in ${fmt(lastRun.time)} with ${lastRun.flips} flips on Wheelie Wahala! ${lastRun.ghost ? 'Race my ghost:' : 'Play:'}`;
   const res = await shareCard(card, { text, url, filename: 'wheelie-wahala.png' });
   if (res === 'downloaded+copied') popup([['Picture saved'], ['race link copied: paste it to a friend', 'pts']], 'small');

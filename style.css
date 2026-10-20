@@ -396,3 +396,5 @@ body.playing .corner .fs-btn { display: none; }
 .diff-seg button { padding: 7px 10px; }
 .level .ldiff { position: absolute; top: 4px; right: 6px; font-size: 15px; }
 .level { position: relative; }
+
+.pill.x-share { background: #111; color: #fff; }
