@@ -398,3 +398,9 @@ body.playing .corner .fs-btn { display: none; }
 .level { position: relative; }
 
 .pill.x-share { background: #111; color: #fff; }
+
+/* Race lobby: the invite link and the host's start button */
+.lobby-status { margin: 0; text-align: center; font-weight: 800; color: var(--deep); }
+.lobby-invite { display: grid; gap: 8px; }
+.lobby-invite input { width: 100%; box-sizing: border-box; padding: 8px 12px; border: 2px solid #f0e0c2; border-radius: 12px; font: 13px ui-monospace, monospace; color: #555; background: #fffaf0; }
+.pill.wa { background: #25d366; color: #fff; }

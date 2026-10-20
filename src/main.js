@@ -1121,6 +1121,9 @@ function renderLive() {
   $('live-count').hidden = !on;
   $('live-count').textContent = n ? `🟢 ${n} other rider${n > 1 ? 's' : ''} online` : '🟢 Live: invite riders when they come online';
   $('btn-race').hidden = !on;
+  renderLobby();
+  // A link's search for its race only counts down once you're in the room.
+  if (on && joining && !joining.live) { joining.live = true; joining.since = performance.now(); }
 }
 
 // Other riders on your course, as see-through bikes in their own start.ng look.
@@ -1154,31 +1157,83 @@ function updatePeers() {
   }
 }
 
-// ---------- live races: invite, lobby, 3-2-1, results ----------
-const LOBBY_MS = 12000;
-let race = null; // the race you're in: { id, slot, host, startAt, riders: Map(id -> { name, time }) }
-let invite = null; // a race someone else started that you could join
+// ---------- live races: invite links, lobby, 3-2-1, results ----------
+// The host picks a course and gets a link (…#join=CODE) to send to anyone. While the lobby is
+// open the host announces it in the room every few seconds ("ww:open:CODE:course:ids"), so people
+// who arrive from the link (or are already playing) find it and join ("ww:join:CODE"). The host
+// presses Start ("ww:go:CODE") and everyone in the lobby gets the 3-2-1 together.
+//   ww:leave:CODE   a rider left the lobby       ww:close:CODE   the host closed it
+//   ww:fin:CODE:ms  a rider's finish time
+const OPEN_EVERY = 4000; // ms between the host's announcements
+const FIND_FOR = 60000; // how long a link waits to hear its race (the host may be off sharing it)
+const JOIN_KEY = 'wheelie-wahala-join'; // a link's race, kept across a sign-in trip to start.ng
+let race = null; // your race: { id, slot, hostId, host, riders: Map(id -> { name, time }), started }
+let invite = null; // someone else's open race you could join: { id, slot, hostId, host }
+let joining = null; // { id, since } while a link is looking for its race
+const dismissed = new Set(); // invites you said no to
+let lastOpen = 0;
 
 const slotName = (slot) => (slot === 30 ? "today's Daily" : LEVELS[slot]?.name ?? 'a course');
+const nameOf = (id) => (id === live.me ? (live.myName || riderName() || player.name || 'You') : live.peers.get(id)?.name ?? 'Rider');
+const inviteLink = (code) => `${location.origin}${location.pathname}#join=${code}`;
+const newCode = () => Array.from(crypto.getRandomValues(new Uint8Array(5)), (n) => 'abcdefghjkmnpqrstuvwxyz23456789'[n % 31]).join('');
+const isHost = () => race && race.hostId === live.me;
 
 function onLiveChat(m, mine) {
-  const [, kind, a, b] = m.text.split(':');
-  if (kind === 'race') {
-    const slot = parseInt(a, 10);
-    if (!(slot >= 0 && slot <= 30)) return;
-    const r = { id: `${m.id}-${m.at}`, slot, host: m.name, startAt: performance.now() + LOBBY_MS, riders: new Map([[m.id, { name: m.name, time: null }]]) };
-    if (mine) {
-      race = r;
+  const [, kind, a, b, c] = m.text.split(':');
+  if (kind === 'open') {
+    const slot = parseInt(b, 10);
+    if (!a || !(slot >= 0 && slot <= 30)) return;
+    if (race?.id === a) {
+      // The host's list of who's in, so everyone sees the same lobby.
+      if (!mine && c) {
+        const ids = c.split('.').map(Number).filter((n) => n > 0);
+        if (!race.started && !ids.includes(live.me)) live.say(`ww:join:${a}`);
+        for (const id of ids) if (!race.riders.has(id)) race.riders.set(id, { name: nameOf(id), time: null });
+        renderLobby();
+      }
+      return;
+    }
+    if (joining?.id === a && !race) {
+      // The race from your link: in you go.
+      joining = null;
+      clearPendingJoin();
+      race = { id: a, slot, hostId: m.id, host: m.name, riders: new Map([[m.id, { name: m.name, time: null }]]), started: false };
+      race.riders.set(live.me, { name: nameOf(live.me), time: null });
+      live.say(`ww:join:${a}`);
+      sfx.checkpoint();
       openLobby();
-    } else if (!race) {
-      invite = r;
+      return;
+    }
+    if (!race && !joining && !mine && !dismissed.has(a) && invite?.id !== a) {
+      invite = { id: a, slot, hostId: m.id, host: m.name, seen: performance.now() };
       $('invite-text').textContent = `${m.name} is starting a race on ${slotName(slot)}!`;
       $('invite').hidden = false;
       sfx.checkpoint();
-    }
+    } else if (invite?.id === a) invite.seen = performance.now();
   } else if (kind === 'join') {
-    for (const r of [race, invite]) if (r?.id === a) r.riders.set(m.id, { name: m.name, time: null });
+    if (race?.id !== a || race.started) return;
+    if (!race.riders.has(m.id)) {
+      race.riders.set(m.id, { name: m.name, time: null });
+      if (!mine) { sfx.checkpoint(); popup([[`${m.name} joined`]], 'small'); }
+      if (isHost()) lastOpen = 0; // tell everyone the new list straight away
+    }
     renderLobby();
+  } else if (kind === 'leave') {
+    if (race?.id !== a || race.started) return;
+    race.riders.delete(m.id);
+    renderLobby();
+  } else if (kind === 'close') {
+    if (invite?.id === a) { invite = null; $('invite').hidden = true; }
+    if (race?.id === a && !race.started && !mine) {
+      race = null;
+      $('lobby').hidden = true;
+      setState('menu');
+      popup([['The host closed the race']], 'small');
+    }
+  } else if (kind === 'go') {
+    if (invite?.id === a) { invite = null; $('invite').hidden = true; }
+    if (race?.id === a && !race.started && race.hostId === m.id) startRace();
   } else if (kind === 'fin') {
     if (race?.id !== a) return;
     const ms = parseInt(b, 10);
@@ -1195,34 +1250,67 @@ function openLobby() {
   $('world').hidden = true;
   $('garage').hidden = true;
   if (showroom) showroom.active = false;
+  if (state === 'playing' || state === 'paused') setState('menu');
+  $('menu').hidden = true;
   $('lobby').hidden = false;
-  $('lobby-course').textContent = `${race.host}'s race on ${slotName(race.slot)}`;
   renderLobby();
 }
 
 function renderLobby() {
-  if (!race || $('lobby').hidden) return;
-  $('lobby-riders').replaceChildren(...[...race.riders.values()].map((r) => {
+  if ($('lobby').hidden) return;
+  const signin = !race && joining && (live.status === 'signin' || !startng.onStartNg() && !new URLSearchParams(location.search).has('live'));
+  $('btn-lobby-signin').hidden = !signin;
+  $('lobby-invite').hidden = !race;
+  $('btn-lobby-start').hidden = !isHost();
+  if (!race) {
+    $('lobby-course').textContent = 'Joining a live race…';
+    $('lobby-status').textContent = signin ? 'Live races are for start.ng players. Sign in and you\'ll come straight back here.'
+      : live.status === 'full' ? 'The live room is full right now. Try again in a minute.'
+      : 'Finding the race…';
+    $('lobby-riders').replaceChildren();
+    return;
+  }
+  $('lobby-course').textContent = isHost() ? `Your race on ${slotName(race.slot)}` : `${race.host}'s race on ${slotName(race.slot)}`;
+  const n = race.riders.size;
+  $('lobby-status').textContent = isHost()
+    ? (n > 1 ? `${n} riders in. Start when you're ready!` : 'Send the link to your friends. Start when they\'re in.')
+    : `Waiting for ${race.host} to start…`;
+  $('btn-lobby-start').textContent = n > 1 ? `▶ Start race (${n} riders)` : '▶ Start race';
+  $('lobby-link').value = inviteLink(race.id);
+  $('lobby-riders').replaceChildren(...[...race.riders.entries()].map(([id, r]) => {
     const li = document.createElement('li');
-    li.textContent = r.name;
+    li.textContent = `${id === race.hostId ? '👑 ' : '🏍️ '}${r.name}${id === live.me ? ' (you)' : ''}`;
     return li;
   }));
 }
 
 function updateRaceTimers() {
   const now = performance.now();
-  if (invite && now >= invite.startAt) {
+  // The host keeps announcing the lobby, with who's in it, until the race starts.
+  if (isHost() && !race.started && live.live && now - lastOpen > OPEN_EVERY) {
+    lastOpen = now;
+    live.say(`ww:open:${race.id}:${race.slot}:${[...race.riders.keys()].join('.')}`);
+  }
+  // An invite you haven't answered goes away when its host stops announcing it.
+  if (invite && now - invite.seen > OPEN_EVERY * 3) {
     invite = null;
     $('invite').hidden = true;
   }
-  if (race && !$('lobby').hidden) {
-    const left = Math.max(0, Math.ceil((race.startAt - now) / 1000));
-    if ($('lobby-time').textContent !== String(left)) $('lobby-time').textContent = left;
-    if (now >= race.startAt) startRace();
+  if (joining?.live && !race && now - joining.since > FIND_FOR) {
+    joining = null;
+    clearPendingJoin();
+    $('lobby').hidden = true;
+    setState('menu');
+    popup([["Couldn't find that race"], ['it may have started already', 'pts']], 'small');
   }
 }
 
+// Also on a timer, not just each frame: a host who's gone to WhatsApp to send the link has the
+// game in the background, where frames stop but timers keep running.
+setInterval(updateRaceTimers, 1000);
+
 async function startRace() {
+  race.started = true;
   $('lobby').hidden = true;
   const r = race;
   if (r.slot === 30) loadCourse(await dailyCourse(), 'daily');
@@ -1246,25 +1334,92 @@ function renderRaceResults() {
   box.hidden = false;
 }
 
+// Hosting: pick a course, then the lobby with your link.
+function hostRace(slot) {
+  sfx.click();
+  if (!live.live) return popup([['Not connected to the live room yet']], 'small');
+  race = { id: newCode(), slot, hostId: live.me, host: nameOf(live.me), riders: new Map([[live.me, { name: nameOf(live.me), time: null }]]), started: false };
+  lastOpen = 0;
+  openLobby();
+}
 $('btn-race').onclick = () => {
   sfx.click();
   $('btn-race-level').textContent = `${LEVELS[levelIndex].name}`;
   $('racepick').hidden = false;
 };
-$('btn-race-level').onclick = () => { live.say(`ww:race:${levelIndex}`); };
-$('btn-race-daily').onclick = () => { live.say('ww:race:30'); };
+$('btn-race-level').onclick = () => hostRace(levelIndex);
+$('btn-race-daily').onclick = () => hostRace(30);
 $('btn-race-cancel').onclick = () => { $('racepick').hidden = true; };
 $('btn-invite-join').onclick = () => {
   if (!invite) return;
   sfx.click();
-  race = invite;
+  const i = invite;
   invite = null;
+  race = { id: i.id, slot: i.slot, hostId: i.hostId, host: i.host, riders: new Map([[i.hostId, { name: i.host, time: null }], [live.me, { name: nameOf(live.me), time: null }]]), started: false };
   live.say(`ww:join:${race.id}`);
-  if (state === 'playing') setState('menu');
   openLobby();
 };
-$('btn-invite-no').onclick = () => { invite = null; $('invite').hidden = true; };
-$('btn-lobby-leave').onclick = () => { race = null; $('lobby').hidden = true; setState('menu'); };
+$('btn-invite-no').onclick = () => { if (invite) dismissed.add(invite.id); invite = null; $('invite').hidden = true; };
+$('btn-lobby-leave').onclick = () => {
+  sfx.click();
+  if (race && !race.started) live.say(`ww:${isHost() ? 'close' : 'leave'}:${race.id}`);
+  race = null;
+  joining = null;
+  clearPendingJoin();
+  $('lobby').hidden = true;
+  setState('menu');
+};
+$('btn-lobby-start').onclick = () => {
+  if (!isHost() || race.started) return;
+  sfx.click();
+  live.say(`ww:go:${race.id}`); // everyone (you too) starts when this comes back from the room
+};
+$('btn-lobby-signin').onclick = () => { sfx.click(); startng.signIn(); };
+
+// Sharing the link: the phone's share sheet, WhatsApp, or copy.
+const inviteText = () => `Race me live on Wheelie Wahala 🏍️ (${slotName(race.slot)})! Tap to join:`;
+$('btn-lobby-share').onclick = async () => {
+  sfx.click();
+  const url = inviteLink(race.id);
+  if (navigator.share) {
+    try { await navigator.share({ title: 'Wheelie Wahala live race', text: inviteText(), url }); return; } catch (e) { if (e?.name === 'AbortError') return; }
+  }
+  $('btn-lobby-copy').click();
+};
+$('btn-lobby-wa').onclick = () => {
+  sfx.click();
+  window.open(`https://wa.me/?text=${encodeURIComponent(`${inviteText()} ${inviteLink(race.id)}`)}`, '_blank', 'noopener');
+};
+$('btn-lobby-copy').onclick = async () => {
+  sfx.click();
+  const url = inviteLink(race.id);
+  try { await navigator.clipboard.writeText(url); }
+  catch { $('lobby-link').select(); document.execCommand?.('copy'); }
+  popup([['Link copied'], ['paste it to your friends', 'pts']], 'small');
+};
+
+// Opening an invite link: #join=CODE. The code is kept for a few minutes so it survives
+// signing in on start.ng (which sends you back without the # part).
+function clearPendingJoin() {
+  try { localStorage.removeItem(JOIN_KEY); } catch {}
+}
+function readJoinLink() {
+  let code = location.hash.match(/^#join=([a-z0-9]{4,12})$/)?.[1];
+  if (code) {
+    history.replaceState(null, '', location.pathname + location.search);
+    try { localStorage.setItem(JOIN_KEY, JSON.stringify({ code, at: Date.now() })); } catch {}
+  } else {
+    try {
+      const p = JSON.parse(localStorage.getItem(JOIN_KEY));
+      if (p && Date.now() - p.at < 10 * 60000) code = p.code;
+      else clearPendingJoin();
+    } catch {}
+  }
+  if (!code || race) return;
+  joining = { id: code, since: performance.now() };
+  openLobby();
+}
+addEventListener('hashchange', readJoinLink);
 
 // ---------- full screen ----------
 // Phones: a ⛶ button in the corner and on the pause screen, and (by default) full screen as a
@@ -1803,6 +1958,7 @@ renderDifficulty();
 loadLevel(0);
 setState('menu');
 readRaceLink();
+readJoinLink();
 live.connect();
 // A link opened while the game is already open in this tab only changes the part after #.
 addEventListener('hashchange', () => {

@@ -232,7 +232,7 @@
   <section id="racepick" class="screen dim" hidden>
     <div class="panel">
       <h2>Live race</h2>
-      <p class="center-text">Everyone playing right now gets your invite. The race starts in 12 seconds.</p>
+      <p class="center-text">Pick a course. You get a link to send to friends, and you start the race when everyone's in.</p>
       <button id="btn-race-level" class="big"></button>
       <button id="btn-race-daily" class="pill">Today's Daily course</button>
       <button id="btn-race-cancel" class="pill">Cancel</button>
@@ -242,8 +242,18 @@
     <div class="panel">
       <h2>Live race</h2>
       <p id="lobby-course" class="center-text"></p>
-      <div id="lobby-time" class="lobby-time"></div>
+      <p id="lobby-status" class="lobby-status"></p>
       <ul id="lobby-riders" class="mission-list compact"></ul>
+      <div id="lobby-invite" class="lobby-invite" hidden>
+        <input id="lobby-link" type="text" readonly aria-label="Invite link">
+        <div class="menu-row">
+          <button id="btn-lobby-share" class="pill">📤 Share link</button>
+          <button id="btn-lobby-wa" class="pill wa">WhatsApp</button>
+          <button id="btn-lobby-copy" class="pill">📋 Copy</button>
+        </div>
+      </div>
+      <button id="btn-lobby-signin" class="big" hidden>Sign in with start.ng to race</button>
+      <button id="btn-lobby-start" class="big" hidden>▶ Start race</button>
       <button id="btn-lobby-leave" class="pill">Leave</button>
     </div>
   </section>
@@ -375,7 +385,7 @@
   <script type="module">
     // The built game. Add ?src to the address to run the unbundled source instead (for development).
     if (new URLSearchParams(location.search).has('src')) import('./src/main.js');
-    else import('./build/game-Q7W6QJIX.js');
+    else import('./build/game-FNORJO2R.js');
   </script>
   <!-- game:end -->
 </body>

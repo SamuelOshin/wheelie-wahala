@@ -78,10 +78,15 @@ multiplier, so harder rides score more.
   server). A friend who opens it races a see-through copy of you, in your start.ng look and your bike,
   and sees who won.
 - **Live riders and races** (signed-in players, through start.ng's live room for this game): other
-  riders on the same course appear as see-through bikes with name tags. **🏁 Live race** sends an invite
-  to everyone online; whoever joins starts together after a 3-2-1, and the results list everyone's time.
-  The room only carries x/z positions within ±60 m, so `src/live.js` packs the course position, height
-  and course into those numbers. Invites and finish times travel as short room chat messages.
+  riders on the same course appear as see-through bikes with name tags. **🏁 Live race** → pick a
+  course, and you get a lobby with an **invite link** (📤 Share, WhatsApp or 📋 Copy). Send it to one
+  friend or a whole group: opening it drops them straight into your lobby (guests sign in on start.ng
+  first and come back to it). Players already in the game get a Join pop-up too. You press
+  **▶ Start race** when everyone's in; all of you get the 3-2-1 together and the results list
+  everyone's time. The room only carries x/z positions within ±60 m, so `src/live.js` packs the
+  course position, height and course into those numbers. The lobby, joins, the start and finish
+  times travel as short room chat messages (the host re-announces the lobby every 4 s, so people
+  arriving from the link find it).
   Test locally with `tools/live-mock.py` and `?live=ws://localhost:8770&as=Name` in two tabs.
 
 ## Reach

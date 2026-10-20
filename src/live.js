@@ -7,6 +7,7 @@
 //   ry = the bike's angle (the room keeps it in 0–2π)
 //   moving = riding right now
 // Race invites, joins and finish times travel as short room chat messages starting "ww:".
+// The room drops chat sent less than 0.7 s apart, so messages wait their turn in a queue.
 import { liveTicket, onStartNg } from './startng.js';
 
 const BAD_TICKET = 4401, ROOM_FULL = 4403, REPLACED = 4409;
@@ -97,6 +98,7 @@ export class LiveRoom {
       case 'welcome':
         this.tries = 0;
         this.me = m.you;
+        this.myName = (m.players ?? []).find((p) => p.id === m.you)?.name ?? this.myName; // your name in the room
         this.peers.clear();
         for (const p of m.players ?? []) if (p.id !== m.you) this.addPeer(p);
         this.setStatus('live');
@@ -139,7 +141,23 @@ export class LiveRoom {
   }
 
   say(text) {
-    if (this.live) this.ws.send(JSON.stringify({ type: 'chat', text }));
+    if (!this.live) return;
+    (this.outbox ??= []).push(text);
+    this.flush();
+  }
+
+  flush() {
+    if (this.flushing || !this.outbox?.length) return;
+    const wait = Math.max(0, (this.lastChat ?? 0) + 800 - performance.now());
+    this.flushing = setTimeout(() => {
+      this.flushing = null;
+      const text = this.outbox.shift();
+      if (text && this.live) {
+        this.ws.send(JSON.stringify({ type: 'chat', text }));
+        this.lastChat = performance.now();
+      }
+      this.flush();
+    }, wait);
   }
 
   get live() {
